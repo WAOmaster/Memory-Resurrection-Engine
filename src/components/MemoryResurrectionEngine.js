@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Upload, Camera, Heart, Sparkles, Download, RefreshCw, Users, Clock, Wand2, Play, X, RotateCcw, Zap } from 'lucide-react';
+import { Upload, Camera, Heart, Sparkles, Download, RefreshCw, Users, Clock, Wand2, Play, X, RotateCcw, Zap, Moon, Sun } from 'lucide-react';
 import MemoryResurrectionAPI from '../services/MemoryResurrectionAPI';
 
 const MemoryResurrectionEngine = () => {
@@ -14,6 +14,7 @@ const MemoryResurrectionEngine = () => {
   const [imageOrientation, setImageOrientation] = useState('landscape');
   const [enhancingPhotos, setEnhancingPhotos] = useState(new Set());
   const [demoMode, setDemoMode] = useState(false);
+  const [darkMode, setDarkMode] = useState(false);
   const [showAdvancedControls, setShowAdvancedControls] = useState(false);
   const [scenarioSettings, setScenarioSettings] = useState({
     culturalStyle: 'western',
@@ -133,6 +134,10 @@ const MemoryResurrectionEngine = () => {
     setDemoMode(false);
     memoryAPI.setDemoMode(false);
     setConversationHistory([]);
+  };
+
+  const toggleDarkMode = () => {
+    setDarkMode(!darkMode);
   };
 
   const handlePhotoUpload = (event) => {
@@ -543,16 +548,26 @@ const MemoryResurrectionEngine = () => {
   };
 
   return (
-    <div className="min-h-screen gradient-bg">
+    <div className={`min-h-screen transition-colors duration-300 ${
+      darkMode 
+        ? 'bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900' 
+        : 'gradient-bg'
+    }`}>
       {/* Header */}
-      <header className="bg-white shadow-sm border-b">
+      <header className={`shadow-sm border-b transition-colors duration-300 ${
+        darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white'
+      }`}>
         <div className="max-w-7xl mx-auto px-4 py-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
               <Heart className="h-8 w-8 text-pink-500" />
               <div>
-                <h1 className="text-3xl font-bold text-gray-900">Memory Resurrection Engine</h1>
-                <p className="text-gray-600">Reunite families across generations with AI</p>
+                <h1 className={`text-3xl font-bold transition-colors duration-300 ${
+                  darkMode ? 'text-white' : 'text-gray-900'
+                }`}>Memory Resurrection Engine</h1>
+                <p className={`transition-colors duration-300 ${
+                  darkMode ? 'text-gray-300' : 'text-gray-600'
+                }`}>Reunite families across generations with AI</p>
               </div>
             </div>
             <div className="flex items-center space-x-4">
@@ -579,7 +594,20 @@ const MemoryResurrectionEngine = () => {
                   </button>
                 </div>
               )}
-              <div className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
+              <button
+                onClick={toggleDarkMode}
+                className={`p-2 rounded-full transition-colors duration-300 ${
+                  darkMode 
+                    ? 'bg-gray-700 text-yellow-400 hover:bg-gray-600' 
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+                title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+              >
+                {darkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+              </button>
+              <div className={`text-sm px-3 py-1 rounded-full transition-colors duration-300 ${
+                darkMode ? 'text-gray-400 bg-gray-700' : 'text-gray-500 bg-gray-100'
+              }`}>
                 Powered by Nano Banana
               </div>
             </div>
@@ -592,8 +620,10 @@ const MemoryResurrectionEngine = () => {
           
           {/* Upload Section */}
           <div className="lg:col-span-1">
-            <div className="card">
-              <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center">
+            <div className={`rounded-xl shadow-lg p-6 transition-colors duration-300 ${
+        darkMode ? 'bg-gray-800' : 'bg-white'
+      }`}>
+              <h2 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'} mb-4 flex items-center">
                 <Upload className="h-5 w-5 mr-2 text-blue-500" />
                 Upload Family Photos
               </h2>
@@ -604,7 +634,7 @@ const MemoryResurrectionEngine = () => {
                   className="w-full border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-400 transition-colors"
                 >
                   <Camera className="h-12 w-12 text-gray-400 mx-auto mb-2" />
-                  <p className="text-gray-600">Click to upload photos</p>
+                  <p className={`${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Click to upload photos</p>
                   <p className="text-sm text-gray-400">Historical & current family photos</p>
                 </button>
                 
@@ -619,7 +649,7 @@ const MemoryResurrectionEngine = () => {
                 
                 {uploadedPhotos.length > 0 && (
                   <div className="space-y-2">
-                    <h3 className="font-medium text-gray-900">Uploaded Photos ({uploadedPhotos.length})</h3>
+                    <h3 className={`font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>Uploaded Photos ({uploadedPhotos.length})</h3>
                     <p className="text-xs text-gray-500 mb-2">Hover over photos for management options • Click labels to change photo type</p>
                     <div className="grid grid-cols-2 gap-2">
                       {uploadedPhotos.map(photo => (
@@ -699,7 +729,7 @@ const MemoryResurrectionEngine = () => {
 
             {/* Scenario Selection */}
             <div className="card mt-6">
-              <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center">
+              <h2 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'} mb-4 flex items-center">
                 <Sparkles className="h-5 w-5 mr-2 text-purple-500" />
                 Choose Scenario
               </h2>
@@ -715,15 +745,15 @@ const MemoryResurrectionEngine = () => {
                         : 'border-gray-200 hover:border-gray-300'
                     }`}
                   >
-                    <h3 className="font-medium text-gray-900">{scenario.title}</h3>
-                    <p className="text-sm text-gray-600">{scenario.description}</p>
+                    <h3 className={`font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>{scenario.title}</h3>
+                    <p className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>{scenario.description}</p>
                   </button>
                 ))}
               </div>
 
               {/* Image Orientation Selection */}
               <div className="mt-4 p-3 bg-gray-50 rounded-lg">
-                <h4 className="font-medium text-gray-900 mb-2">Image Orientation</h4>
+                <h4 className={`font-medium ${darkMode ? 'text-white' : 'text-gray-900'} mb-2`}>Image Orientation</h4>
                 <div className="flex space-x-3">
                   <button
                     onClick={() => setImageOrientation('landscape')}
@@ -764,7 +794,7 @@ const MemoryResurrectionEngine = () => {
               {/* Advanced Scenario Controls */}
               <div className="mt-4 p-3 bg-blue-50 rounded-lg">
                 <div className="flex items-center justify-between mb-2">
-                  <h4 className="font-medium text-gray-900">Advanced Scenario Settings</h4>
+                  <h4 className={`font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>Advanced Scenario Settings</h4>
                   <button
                     onClick={() => setShowAdvancedControls(!showAdvancedControls)}
                     className="text-blue-600 hover:text-blue-700 text-sm font-medium"
@@ -860,8 +890,10 @@ const MemoryResurrectionEngine = () => {
 
           {/* Generated Images Section */}
           <div className="lg:col-span-2">
-            <div className="card">
-              <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center">
+            <div className={`rounded-xl shadow-lg p-6 transition-colors duration-300 ${
+        darkMode ? 'bg-gray-800' : 'bg-white'
+      }`}>
+              <h2 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'} mb-4 flex items-center">
                 <Users className="h-5 w-5 mr-2 text-green-500" />
                 Generated Memories
               </h2>
@@ -878,7 +910,7 @@ const MemoryResurrectionEngine = () => {
                     <div key={image.id} className="border rounded-lg p-4 bg-gradient-to-r from-purple-50 to-pink-50">
                       <div className="flex justify-between items-start mb-3">
                         <div>
-                          <h3 className="font-medium text-gray-900 flex items-center">
+                          <h3 className={`font-medium ${darkMode ? 'text-white' : 'text-gray-900'} flex items-center`}>
                             {image.scenario}
                             {demoMode && <span className="ml-2 text-orange-600 text-sm">(Demo Mode)</span>}
                           </h3>
@@ -967,7 +999,7 @@ const MemoryResurrectionEngine = () => {
                       </div>
                       
                       <div className="space-y-3">
-                        <div className="text-sm text-gray-600">
+                        <div className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
                           <div className="flex items-center justify-between mb-2">
                             <span className="font-medium">Nano Banana Features Used:</span>
                             {image.quality && (
@@ -986,7 +1018,7 @@ const MemoryResurrectionEngine = () => {
                           </div>
                         </div>
                         
-                        <div className="text-sm text-gray-600 bg-white rounded p-3">
+                        <div className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'} bg-white rounded p-3`}>
                           <p className="font-medium mb-1">Generation Details:</p>
                           <p>Used {image.historicalPhotosUsed} historical and {image.currentPhotosUsed} current photos</p>
                           {image.description && (
@@ -1020,7 +1052,7 @@ const MemoryResurrectionEngine = () => {
                           {editingImageId === image.id && (
                             <div className="space-y-3">
                               <div>
-                                <p className="text-sm text-gray-600 mb-2">Quick suggestions:</p>
+                                <p className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'} mb-2`}>Quick suggestions:</p>
                                 <div className="flex flex-wrap gap-2">
                                   {[
                                     "Make the lighting warmer",
@@ -1080,7 +1112,7 @@ const MemoryResurrectionEngine = () => {
             {/* Conversation History */}
             {conversationHistory.length > 0 && (
               <div className="card mt-6">
-                <h2 className="text-lg font-bold text-gray-900 mb-4">Creation History</h2>
+                <h2 className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'} mb-4`}>Creation History</h2>
                 <div className="space-y-3">
                   {conversationHistory.map((entry, index) => (
                     <div key={index} className="flex items-start space-x-3">
@@ -1089,7 +1121,7 @@ const MemoryResurrectionEngine = () => {
                         entry.type === 'edit' ? 'bg-blue-500' : 'bg-green-500'
                       }`} />
                       <div className="flex-1">
-                        <p className="text-sm text-gray-900">{entry.content}</p>
+                        <p className={`text-sm ${darkMode ? 'text-white' : 'text-gray-900'}`}>{entry.content}</p>
                         <p className="text-xs text-gray-500">{entry.timestamp.toLocaleTimeString()}</p>
                       </div>
                     </div>
