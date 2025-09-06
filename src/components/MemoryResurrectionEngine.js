@@ -562,12 +562,8 @@ const MemoryResurrectionEngine = () => {
             <div className="flex items-center space-x-3">
               <Heart className="h-8 w-8 text-pink-500" />
               <div>
-                <h1 className={`text-3xl font-bold transition-colors duration-300 ${
-                  darkMode ? 'text-white' : 'text-gray-900'
-                }`}>Memory Resurrection Engine</h1>
-                <p className={`transition-colors duration-300 ${
-                  darkMode ? 'text-gray-300' : 'text-gray-600'
-                }`}>Reunite families across generations with AI</p>
+                <h1 className={darkMode ? 'text-3xl font-bold transition-colors duration-300 text-white' : 'text-3xl font-bold transition-colors duration-300 text-gray-900'}>Memory Resurrection Engine</h1>
+                <p className={darkMode ? 'transition-colors duration-300 text-gray-300' : 'transition-colors duration-300 text-gray-600'}>Reunite families across generations with AI</p>
               </div>
             </div>
             <div className="flex items-center space-x-4">
@@ -623,7 +619,7 @@ const MemoryResurrectionEngine = () => {
             <div className={`rounded-xl shadow-lg p-6 transition-colors duration-300 ${
         darkMode ? 'bg-gray-800' : 'bg-white'
       }`}>
-              <h2 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'} mb-4 flex items-center">
+              <h2 className={darkMode ? 'text-xl font-bold text-white mb-4 flex items-center' : 'text-xl font-bold text-gray-900 mb-4 flex items-center'}>
                 <Upload className="h-5 w-5 mr-2 text-blue-500" />
                 Upload Family Photos
               </h2>
@@ -634,7 +630,7 @@ const MemoryResurrectionEngine = () => {
                   className="w-full border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-400 transition-colors"
                 >
                   <Camera className="h-12 w-12 text-gray-400 mx-auto mb-2" />
-                  <p className={`${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>Click to upload photos</p>
+                  <p className={darkMode ? 'text-gray-300' : 'text-gray-600'}>Click to upload photos</p>
                   <p className="text-sm text-gray-400">Historical & current family photos</p>
                 </button>
                 
@@ -649,7 +645,7 @@ const MemoryResurrectionEngine = () => {
                 
                 {uploadedPhotos.length > 0 && (
                   <div className="space-y-2">
-                    <h3 className={`font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>Uploaded Photos ({uploadedPhotos.length})</h3>
+                    <h3 className={'font-medium ' + (darkMode ? 'text-white' : 'text-gray-900')}>Uploaded Photos ({uploadedPhotos.length})</h3>
                     <p className="text-xs text-gray-500 mb-2">Hover over photos for management options • Click labels to change photo type</p>
                     <div className="grid grid-cols-2 gap-2">
                       {uploadedPhotos.map(photo => (
@@ -657,19 +653,18 @@ const MemoryResurrectionEngine = () => {
                           <img
                             src={photo.url}
                             alt={photo.name}
-                            className={`w-full h-24 object-cover rounded-lg ${photo.enhanced ? 'ring-2 ring-green-400' : ''}`}
+                            className={'w-full h-24 object-cover rounded-lg ' + (photo.enhanced ? 'ring-2 ring-green-400' : '')}
                           />
                           
                           {/* Photo Type Badge */}
                           <button
                             onClick={() => togglePhotoType(photo.id)}
-                            className={`absolute top-1 right-1 px-2 py-1 text-xs rounded cursor-pointer hover:opacity-80 transition-opacity z-10 ${
-                              photo.type === 'historical' 
+                            className={'absolute top-1 right-1 px-2 py-1 text-xs rounded cursor-pointer hover:opacity-80 transition-opacity z-10 ' + 
+                              (photo.type === 'historical' 
                                 ? 'bg-amber-100 text-amber-800 hover:bg-amber-200' 
                                 : photo.type === 'background'
                                 ? 'bg-gray-100 text-gray-800 hover:bg-gray-200'
-                                : 'bg-blue-100 text-blue-800 hover:bg-blue-200'
-                            }`}
+                                : 'bg-blue-100 text-blue-800 hover:bg-blue-200')}
                             title="Click to cycle: Current → Historical → Background"
                           >
                             {photo.type === 'historical' ? 'Historical' : photo.type === 'background' ? 'Background' : 'Current'}
@@ -728,8 +723,8 @@ const MemoryResurrectionEngine = () => {
             </div>
 
             {/* Scenario Selection */}
-            <div className="card mt-6">
-              <h2 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'} mb-4 flex items-center">
+            <div className={'rounded-xl shadow-lg p-6 transition-colors duration-300 mt-6 ' + (darkMode ? 'bg-gray-800' : 'bg-white')}>
+              <h2 className={darkMode ? 'text-xl font-bold text-white mb-4 flex items-center' : 'text-xl font-bold text-gray-900 mb-4 flex items-center'}>
                 <Sparkles className="h-5 w-5 mr-2 text-purple-500" />
                 Choose Scenario
               </h2>
@@ -893,7 +888,7 @@ const MemoryResurrectionEngine = () => {
             <div className={`rounded-xl shadow-lg p-6 transition-colors duration-300 ${
         darkMode ? 'bg-gray-800' : 'bg-white'
       }`}>
-              <h2 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'} mb-4 flex items-center">
+              <h2 className={darkMode ? 'text-xl font-bold text-white mb-4 flex items-center' : 'text-xl font-bold text-gray-900 mb-4 flex items-center'}>
                 <Users className="h-5 w-5 mr-2 text-green-500" />
                 Generated Memories
               </h2>
@@ -1111,7 +1106,9 @@ const MemoryResurrectionEngine = () => {
             
             {/* Conversation History */}
             {conversationHistory.length > 0 && (
-              <div className="card mt-6">
+              <div className={`rounded-xl shadow-lg p-6 transition-colors duration-300 mt-6 ${
+        darkMode ? 'bg-gray-800' : 'bg-white'
+      }`}>
                 <h2 className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'} mb-4`}>Creation History</h2>
                 <div className="space-y-3">
                   {conversationHistory.map((entry, index) => (

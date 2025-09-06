@@ -14,7 +14,9 @@
       "WebFetch(domain:ai.google.dev)",
       "Bash(npm run lint)",
       "WebSearch",
-      "Bash(set PORT=3002)"
+      "Bash(set PORT=3002)",
+      "Bash(start http://localhost:3000)",
+      "Bash(set PORT=3003)"
     ],
     "deny": [],
     "ask": []
