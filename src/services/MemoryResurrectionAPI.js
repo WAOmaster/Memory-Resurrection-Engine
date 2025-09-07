@@ -67,6 +67,12 @@ class MemoryResurrectionAPI {
       // Use the first current photo as the base image to edit
       const baseCurrentPhoto = currentPhotos[0];
       console.log('Using current photo as base for editing:', baseCurrentPhoto.name);
+      console.log('DEBUGGING IMAGE ORDER:');
+      console.log('📸 BASE IMAGE (will be edited):', baseCurrentPhoto.name, baseCurrentPhoto.file.size, 'bytes');
+      
+      for (let i = 0; i < historicalPhotos.length; i++) {
+        console.log(`📸 HISTORICAL IMAGE ${i + 1} (to be added):`, historicalPhotos[i].name, historicalPhotos[i].file?.size, 'bytes');
+      }
       
       // Build content structure: base current image first, then historical persons, then background if provided
       const parts = [];
@@ -91,26 +97,7 @@ class MemoryResurrectionAPI {
           mimeType: photo.mimeType
         });
         
-        if (photo.savedCharacter && photo.originalPhoto) {
-          // Use original photo file for saved character (not blended result)
-          console.log('Using original photo file for saved character');
-          const base64 = await this.fileToBase64(photo.file);
-          parts.push({
-            inlineData: {
-              mimeType: photo.file.type,
-              data: base64
-            }
-          });
-        } else if (photo.savedCharacter && photo.base64Data) {
-          // Fallback: use saved character data directly
-          console.log('Using saved character data for historical photo');
-          parts.push({
-            inlineData: {
-              mimeType: photo.mimeType || 'image/png',
-              data: photo.base64Data
-            }
-          });
-        } else if (photo.file) {
+        if (photo.file) {
           // Process uploaded file
           console.log('Processing uploaded file for historical photo');
           const base64 = await this.fileToBase64(photo.file);
@@ -178,43 +165,7 @@ CRITICAL REQUIREMENTS:
 RESULT: All ${currentPhotos.length + historicalPhotos.length} people in the new background setting.`;
 
       } else {
-        // Enhanced person addition workflow with stronger emphasis
-        const usingCharacterData = historicalPhotos.some(p => p.savedCharacter);
-        const savedCharacter = historicalPhotos.find(p => p.savedCharacter);
-        const hasSuccessfulBlendHistory = savedCharacter?.successfulBlendSettings;
-        
-        imageEditingPrompt = `🚨 CRITICAL PHOTO EDITING TASK:
-You are editing IMAGE 1 by adding the person from IMAGE 2.
-
-📸 WHAT YOU HAVE:
-- IMAGE 1: Current photo with ${currentPhotos.length} people (the base to edit)
-- IMAGE 2: Historical person${usingCharacterData ? ' (saved character from original photo)' : ''} who MUST BE ADDED to image 1${hasSuccessfulBlendHistory ? `\n\n📋 BLEND SUCCESS HISTORY:\nThis historical person was previously successfully integrated in a ${hasSuccessfulBlendHistory.scenario} scenario. Use similar blending techniques for consistency.` : ''}
-
-🎯 YOUR MISSION:
-1. KEEP all ${currentPhotos.length} people from image 1 exactly as they appear
-2. ADD the historical person from image 2 to the scene
-3. RESULT: Final image shows ${currentPhotos.length + historicalPhotos.length} people total
-
-⚡ HISTORICAL PERSON REQUIREMENTS:
-- MUST BE VISIBLE in the final image
-- MUST look identical to image 2 ${usingCharacterData ? '(use original photo, not blended version)' : ''}
-- MUST be positioned naturally within the current photo setting
-- MUST have lighting that matches the current photo environment
-- MUST appear as if they were originally part of the ${scenario.title.toLowerCase()} scene${hasSuccessfulBlendHistory ? `\n- APPLY similar blending quality as the successful ${hasSuccessfulBlendHistory.scenario} integration` : ''}
-
-🚫 ABSOLUTE PROHIBITIONS:
-- DO NOT skip adding the historical person
-- DO NOT remove anyone from the current photo  
-- DO NOT create additional people not shown in the images
-- DO NOT change the faces or appearance of any person
-
-✅ SUCCESS VERIFICATION:
-Before finishing, count the people in your result:
-- Should be exactly ${currentPhotos.length + historicalPhotos.length} people
-- Historical person from image 2 must be recognizable and visible
-- Current photo people must remain unchanged
-
-🎬 EXECUTE: Add the historical person to the current ${scenario.title.toLowerCase()} photo NOW.`;
+        imageEditingPrompt = `Edit the current image, insert the person/s in historical image to the current image. In edited current image, the inserted historical person, keep the head uniquely to the uploaded historical image.`;
       }
       
       // Add the editing instruction

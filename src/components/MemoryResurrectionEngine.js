@@ -22,8 +22,6 @@ const MemoryResurrectionEngine = () => {
     clothingStyle: 'formal',
     locationStyle: 'indoor'
   });
-  const [savedHistoricalCharacter, setSavedHistoricalCharacter] = useState(null);
-  const [showCharacterSaveOptions, setShowCharacterSaveOptions] = useState(null);
   const fileInputRef = useRef(null);
 
   const memoryAPI = new MemoryResurrectionAPI(process.env.REACT_APP_GEMINI_API_KEY);
@@ -91,12 +89,31 @@ const MemoryResurrectionEngine = () => {
   ];
 
   const loadDemoData = async () => {
-    const demoPhotos = await Promise.all([
-      createDemoPhoto('demo1', 'einstein_1947.jpg', 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d3/Albert_Einstein_Head.jpg/256px-Albert_Einstein_Head.jpg', 'historical'),
-      createDemoPhoto('demo2', 'professional_portrait.jpg', 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&h=300&fit=crop&crop=face', 'current'),
-      createDemoPhoto('demo3', 'marie_curie_1920s.jpg', 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c8/Marie_Curie_c._1920s.jpg/256px-Marie_Curie_c._1920s.jpg', 'historical'),
-      createDemoPhoto('demo4', 'paris_background.jpg', 'https://images.unsplash.com/photo-1549144511-f099e773c147?w=400&h=300&fit=crop&crop=entropy', 'background')
-    ]);
+    // Random demo sets - pick one randomly each time
+    const demoSets = [
+      // Set 1: Einstein + Modern Family
+      [
+        { id: 'demo1', name: 'einstein_portrait.jpg', url: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d3/Albert_Einstein_Head.jpg/256px-Albert_Einstein_Head.jpg', type: 'historical' },
+        { id: 'demo2', name: 'modern_family.jpg', url: 'https://images.unsplash.com/photo-1511895426328-dc8714191300?w=400&h=300&fit=crop&crop=faces', type: 'current' }
+      ],
+      // Set 2: Vintage Woman + Modern Couple  
+      [
+        { id: 'demo3', name: 'vintage_woman.jpg', url: 'https://images.unsplash.com/photo-1594736797933-d0f06ba0d6f4?w=300&h=400&fit=crop&crop=face', type: 'historical' },
+        { id: 'demo4', name: 'couple_portrait.jpg', url: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&h=300&fit=crop&crop=faces', type: 'current' }
+      ],
+      // Set 3: Historical Man + Family Group
+      [
+        { id: 'demo5', name: 'historical_gentleman.jpg', url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&h=400&fit=crop&crop=face', type: 'historical' },
+        { id: 'demo6', name: 'family_group.jpg', url: 'https://images.unsplash.com/photo-1581579438747-1dc8d17bbce4?w=400&h=300&fit=crop&crop=faces', type: 'current' }
+      ]
+    ];
+
+    // Pick a random demo set
+    const randomSet = demoSets[Math.floor(Math.random() * demoSets.length)];
+    
+    const demoPhotos = await Promise.all(
+      randomSet.map(photo => createDemoPhoto(photo.id, photo.name, photo.url, photo.type))
+    );
     
     setUploadedPhotos(demoPhotos.filter(photo => photo !== null));
     setDemoMode(true);
@@ -108,6 +125,8 @@ const MemoryResurrectionEngine = () => {
         timestamp: new Date()
       }
     ]);
+    
+    console.log(`Demo data loaded with set ${demoSets.indexOf(randomSet) + 1}:`, randomSet.map(p => p.name));
   };
 
   const createDemoPhoto = async (id, name, url, type) => {
@@ -142,101 +161,6 @@ const MemoryResurrectionEngine = () => {
     setDarkMode(!darkMode);
   };
 
-  const saveHistoricalCharacter = (image) => {
-    // Find the original historical photos used to create this image
-    const originalHistoricalPhotos = uploadedPhotos.filter(p => p.type === 'historical');
-    
-    if (originalHistoricalPhotos.length === 0) {
-      alert('Cannot save character - no original historical photos found. Make sure you have uploaded historical photos.');
-      return;
-    }
-    
-    // Use the original historical photo data, not the blended result
-    const originalHistoricalPhoto = originalHistoricalPhotos[0]; // Use the first/primary historical photo
-    
-    if (!originalHistoricalPhoto.file) {
-      alert('Cannot save character - original historical photo file not available.');
-      return;
-    }
-    
-    setSavedHistoricalCharacter({
-      id: Date.now(),
-      sourceImage: image, // Keep reference to the successful blend for display
-      characterData: {
-        // Use original historical photo data
-        originalPhoto: originalHistoricalPhoto,
-        url: originalHistoricalPhoto.url,
-        file: originalHistoricalPhoto.file,
-        mimeType: originalHistoricalPhoto.file.type,
-        scenario: image.scenario,
-        timestamp: new Date(),
-        // Save the successful blend settings
-        successfulBlendSettings: {
-          scenario: image.scenario,
-          baseImageUsed: image.metadata?.baseImageUsed,
-          blendQuality: 'successful' // indicates this combination worked
-        }
-      },
-      metadata: {
-        originalHistoricalPhotos: image.historicalPhotosUsed,
-        originalCurrentPhotos: image.currentPhotosUsed,
-        baseImageUsed: image.metadata?.baseImageUsed,
-        blendedImageUrl: image.url // Keep the successful result as reference
-      }
-    });
-    setShowCharacterSaveOptions(null);
-    
-    console.log('Historical character saved (using original photo):', { 
-      hasOriginalFile: !!originalHistoricalPhoto.file,
-      originalPhotoName: originalHistoricalPhoto.name,
-      mimeType: originalHistoricalPhoto.file.type,
-      successfulScenario: image.scenario
-    });
-    
-    // Show success message
-    alert('✅ Historical character saved! Using the original historical photo for consistency. You can now change the current image and the same historical person will be added to new photos.');
-  };
-
-  const clearHistoricalCharacter = () => {
-    setSavedHistoricalCharacter(null);
-    alert('Historical character cleared. Upload a new historical photo to start fresh.');
-  };
-
-  const replaceCurrentPhoto = () => {
-    if (!savedHistoricalCharacter) {
-      alert('Please save a historical character first by generating an image and using \"Save Character\" option.');
-      return;
-    }
-    
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.onchange = (e) => {
-      const file = e.target.files[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          // Replace all current photos with the new one
-          const newPhoto = {
-            id: Date.now() + Math.random(),
-            name: file.name,
-            url: e.target.result,
-            file: file,
-            type: 'current',
-            autoDetected: false
-          };
-          
-          // Keep historical and background photos, replace current ones
-          setUploadedPhotos(prev => [
-            ...prev.filter(p => p.type !== 'current'),
-            newPhoto
-          ]);
-        };
-        reader.readAsDataURL(file);
-      }
-    };
-    input.click();
-  };
 
   const handlePhotoUpload = (event) => {
     const files = Array.from(event.target.files);
@@ -293,8 +217,8 @@ const MemoryResurrectionEngine = () => {
       return;
     }
     
-    if (historicalPhotos.length === 0 && !savedHistoricalCharacter) {
-      alert('Please upload at least one Historical photo of the person to add, or save a historical character first');
+    if (historicalPhotos.length === 0) {
+      alert('Please upload at least one Historical photo of the person to add');
       return;
     }
     
@@ -323,46 +247,7 @@ const MemoryResurrectionEngine = () => {
         
         setGeneratedImages(prev => [generatedImage, ...prev]);
       } else {
-        // Use saved historical character if available, otherwise use uploaded photos
-        let effectiveHistoricalPhotos = historicalPhotos;
-        
-        if (savedHistoricalCharacter && currentPhotos.length > 0) {
-          console.log('Using saved historical character:', {
-            hasCharacter: !!savedHistoricalCharacter,
-            hasOriginalFile: !!savedHistoricalCharacter.characterData.file,
-            originalPhotoName: savedHistoricalCharacter.characterData.originalPhoto?.name,
-            mimeType: savedHistoricalCharacter.characterData.mimeType,
-            currentPhotosCount: currentPhotos.length,
-            successfulBlendScenario: savedHistoricalCharacter.characterData.successfulBlendSettings?.scenario
-          });
-          
-          // Create a virtual historical photo using the original photo data
-          effectiveHistoricalPhotos = [{
-            id: 'saved-character',
-            name: 'Saved Historical Character (' + savedHistoricalCharacter.characterData.originalPhoto.name + ')',
-            url: savedHistoricalCharacter.characterData.url,
-            file: savedHistoricalCharacter.characterData.file,
-            mimeType: savedHistoricalCharacter.characterData.mimeType,
-            type: 'historical',
-            savedCharacter: true,
-            originalPhoto: true, // Flag to indicate this is original photo data
-            successfulBlendSettings: savedHistoricalCharacter.characterData.successfulBlendSettings
-          }];
-          
-          console.log('Created virtual historical photo from original:', {
-            name: effectiveHistoricalPhotos[0].name,
-            hasFile: !!effectiveHistoricalPhotos[0].file,
-            isOriginal: effectiveHistoricalPhotos[0].originalPhoto
-          });
-        } else {
-          console.log('Using uploaded historical photos:', {
-            savedCharacterExists: !!savedHistoricalCharacter,
-            currentPhotosCount: currentPhotos.length,
-            uploadedHistoricalCount: historicalPhotos.length
-          });
-        }
-        
-        const result = await memoryAPI.resurrectMemory(effectiveHistoricalPhotos, currentPhotos, scenario, imageOrientation, scenarioSettings);
+        const result = await memoryAPI.resurrectMemory(historicalPhotos, currentPhotos, scenario, imageOrientation, scenarioSettings);
         
         if (result.success) {
           const generatedImage = {
@@ -806,45 +691,12 @@ const MemoryResurrectionEngine = () => {
           {/* Upload Section */}
           <div className="lg:col-span-1">
             {/* Saved Character Status */}
-            {savedHistoricalCharacter && (
-              <div className="rounded-xl shadow-lg p-4 mb-6 bg-gradient-to-r from-purple-100 to-pink-100 border border-purple-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-medium text-purple-900 flex items-center">
-                      <Users className="h-4 w-4 mr-2" />
-                      Historical Character Saved
-                    </h3>
-                    <p className="text-sm text-purple-700 mt-1">
-                      From: {savedHistoricalCharacter.metadata.baseImageUsed}
-                    </p>
-                    <p className="text-xs text-purple-600">
-                      Ready to use with new current photos
-                    </p>
-                  </div>
-                  <div className="flex space-x-2">
-                    <button
-                      onClick={replaceCurrentPhoto}
-                      className="bg-purple-600 text-white px-3 py-1 rounded text-sm hover:bg-purple-700 transition-colors"
-                    >
-                      Change Current Photo
-                    </button>
-                    <button
-                      onClick={clearHistoricalCharacter}
-                      className="bg-gray-500 text-white px-3 py-1 rounded text-sm hover:bg-gray-600 transition-colors"
-                    >
-                      Clear
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-            
             <div className={`rounded-xl shadow-lg p-6 transition-colors duration-300 ${
         darkMode ? 'bg-gray-800' : 'bg-white'
       }`}>
               <h2 className={darkMode ? 'text-xl font-bold text-white mb-4 flex items-center' : 'text-xl font-bold text-gray-900 mb-4 flex items-center'}>
                 <Upload className="h-5 w-5 mr-2 text-blue-500" />
-                {savedHistoricalCharacter ? 'Change Current Photo' : 'Upload Photos for Editing'}
+                Upload Photos for Editing
               </h2>
               
               <div className="space-y-4">
@@ -854,7 +706,7 @@ const MemoryResurrectionEngine = () => {
                 >
                   <Camera className="h-12 w-12 text-gray-400 mx-auto mb-2" />
                   <p className={darkMode ? 'text-gray-300' : 'text-gray-600'}>Click to upload photos</p>
-                  <p className="text-sm text-gray-400">Current + Historical person(s) + Background = Everyone moved to new setting</p>
+                  <p className="text-sm text-gray-400">Current photo + Historical person = AI-blended family reunion</p>
                 </button>
                 
                 <input
@@ -869,7 +721,7 @@ const MemoryResurrectionEngine = () => {
                 {uploadedPhotos.length > 0 && (
                   <div className="space-y-2">
                     <h3 className={'font-medium ' + (darkMode ? 'text-white' : 'text-gray-900')}>Uploaded Photos ({uploadedPhotos.length})</h3>
-                    <p className="text-xs text-gray-500 mb-2">Current = base image • Historical = person to add • Background = moves everyone to new setting</p>
+                    <p className="text-xs text-gray-500 mb-2">Current = base photo • Historical = person to add</p>
                     <div className="grid grid-cols-2 gap-2">
                       {uploadedPhotos.map(photo => (
                         <div key={photo.id} className="relative group">
@@ -1108,7 +960,7 @@ const MemoryResurrectionEngine = () => {
 
               <button
                 onClick={generateMemoryImage}
-                disabled={!selectedScenario || uploadedPhotos.filter(p => p.type === 'current').length === 0 || (uploadedPhotos.filter(p => p.type === 'historical').length === 0 && !savedHistoricalCharacter) || isGenerating}
+                disabled={!selectedScenario || uploadedPhotos.filter(p => p.type === 'current').length === 0 || uploadedPhotos.filter(p => p.type === 'historical').length === 0 || isGenerating}
                 className="w-full mt-6 bg-gradient-to-r from-purple-600 to-pink-600 text-white py-3 px-4 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:from-purple-700 hover:to-pink-700 transition-colors flex items-center justify-center"
               >
                 {isGenerating ? (
@@ -1215,31 +1067,6 @@ const MemoryResurrectionEngine = () => {
                             )}
                           </div>
                           
-                          {/* Save Character Button */}
-                          <div className="relative">
-                            <button
-                              onClick={() => setShowCharacterSaveOptions(showCharacterSaveOptions === image.id ? null : image.id)}
-                              className="flex items-center text-purple-600 hover:text-purple-700"
-                              title="Save historical character for reuse"
-                            >
-                              <Users className="h-4 w-4 mr-1" />
-                              Save Character
-                            </button>
-                            {showCharacterSaveOptions === image.id && (
-                              <div className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg py-2 z-10 min-w-[200px]">
-                                <button
-                                  onClick={() => saveHistoricalCharacter(image)}
-                                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 flex items-center"
-                                >
-                                  <Users className="h-4 w-4 mr-2 text-purple-500" />
-                                  Save Historical Person
-                                </button>
-                                <p className="px-3 py-1 text-xs text-gray-500">
-                                  Saves the historical person to reuse with different current photos
-                                </p>
-                              </div>
-                            )}
-                          </div>
                           <button 
                             onClick={() => generateVariation(image)}
                             disabled={isGenerating}
