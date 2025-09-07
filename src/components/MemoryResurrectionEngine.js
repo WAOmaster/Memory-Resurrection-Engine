@@ -182,7 +182,23 @@ const MemoryResurrectionEngine = () => {
 
 
   const generateMemoryImage = async () => {
-    if (!selectedScenario || uploadedPhotos.length < 2) return;
+    const currentPhotos = uploadedPhotos.filter(p => p.type === 'current');
+    const historicalPhotos = uploadedPhotos.filter(p => p.type === 'historical');
+    
+    if (!selectedScenario) {
+      alert('Please select a scenario first');
+      return;
+    }
+    
+    if (currentPhotos.length === 0) {
+      alert('Please upload at least one Current photo as the base image to edit');
+      return;
+    }
+    
+    if (historicalPhotos.length === 0) {
+      alert('Please upload at least one Historical photo of the person to add');
+      return;
+    }
     
     setIsGenerating(true);
     
@@ -270,8 +286,39 @@ const MemoryResurrectionEngine = () => {
         
         setGeneratedImages(prev => [updatedImage, ...prev.filter(img => img.id !== imageToEdit.id)]);
       } else {
+        // Extract base64 data safely from the image URL
+        let base64Data = null;
+        let mimeType = 'image/png';
+        
+        try {
+          if (imageToEdit.url && imageToEdit.url.includes('data:')) {
+            // Handle data URL format
+            const parts = imageToEdit.url.split(',');
+            if (parts.length > 1) {
+              base64Data = parts[1];
+              // Extract mime type
+              const mimeMatch = parts[0].match(/data:([^;]+);/);
+              if (mimeMatch) {
+                mimeType = mimeMatch[1];
+              }
+            }
+          } else if (imageToEdit.base64Data) {
+            // Handle direct base64 data
+            base64Data = imageToEdit.base64Data;
+            mimeType = imageToEdit.mimeType || 'image/png';
+          }
+          
+          if (!base64Data) {
+            throw new Error('Unable to extract image data for editing');
+          }
+        } catch (error) {
+          console.error('Image data extraction failed:', error);
+          alert('Cannot edit this image - invalid image data. Try generating a new variation first.');
+          return;
+        }
+
         const result = await memoryAPI.editMemory(
-          { base64Data: imageToEdit.url.split(',')[1] },
+          { base64Data, mimeType },
           editPrompt,
           conversationHistory,
           imageOrientation
@@ -281,14 +328,19 @@ const MemoryResurrectionEngine = () => {
           const updatedImage = {
             ...imageToEdit,
             id: Date.now(),
-            url: result.image.url,
+            url: result.image.url || result.image,
             editHistory: [...(imageToEdit.editHistory || []), editPrompt],
             lastEdit: editPrompt,
             timestamp: new Date(),
-            processingTime: "API processing time"
+            processingTime: "API processing time",
+            base64Data: result.image.base64Data,
+            mimeType: result.image.mimeType
           };
           
           setGeneratedImages(prev => [updatedImage, ...prev.filter(img => img.id !== imageToEdit.id)]);
+        } else {
+          console.error('Edit failed:', result.error);
+          alert(`Editing failed: ${result.error || 'Unknown error'}. Try generating a new variation instead.`);
         }
       }
       
@@ -621,7 +673,7 @@ const MemoryResurrectionEngine = () => {
       }`}>
               <h2 className={darkMode ? 'text-xl font-bold text-white mb-4 flex items-center' : 'text-xl font-bold text-gray-900 mb-4 flex items-center'}>
                 <Upload className="h-5 w-5 mr-2 text-blue-500" />
-                Upload Family Photos
+                Upload Photos for Editing
               </h2>
               
               <div className="space-y-4">
@@ -631,7 +683,7 @@ const MemoryResurrectionEngine = () => {
                 >
                   <Camera className="h-12 w-12 text-gray-400 mx-auto mb-2" />
                   <p className={darkMode ? 'text-gray-300' : 'text-gray-600'}>Click to upload photos</p>
-                  <p className="text-sm text-gray-400">Historical & current family photos</p>
+                  <p className="text-sm text-gray-400">Current photo (base) + Historical person(s) + Optional background</p>
                 </button>
                 
                 <input
@@ -646,7 +698,7 @@ const MemoryResurrectionEngine = () => {
                 {uploadedPhotos.length > 0 && (
                   <div className="space-y-2">
                     <h3 className={'font-medium ' + (darkMode ? 'text-white' : 'text-gray-900')}>Uploaded Photos ({uploadedPhotos.length})</h3>
-                    <p className="text-xs text-gray-500 mb-2">Hover over photos for management options • Click labels to change photo type</p>
+                    <p className="text-xs text-gray-500 mb-2">Current = base image to edit • Historical = person to add • Background = new setting</p>
                     <div className="grid grid-cols-2 gap-2">
                       {uploadedPhotos.map(photo => (
                         <div key={photo.id} className="relative group">
@@ -863,20 +915,34 @@ const MemoryResurrectionEngine = () => {
                 )}
               </div>
               
+              {/* Validation Info */}
+              {(uploadedPhotos.filter(p => p.type === 'current').length === 0 || uploadedPhotos.filter(p => p.type === 'historical').length === 0) && (
+                <div className="mt-4 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+                  <div className="text-sm text-yellow-800">
+                    <p className="font-medium mb-1">Required for editing:</p>
+                    <ul className="text-xs space-y-1 ml-2">
+                      <li>• At least 1 <strong>Current</strong> photo (base image to edit)</li>
+                      <li>• At least 1 <strong>Historical</strong> photo (person to add)</li>
+                      <li>• Optional: <strong>Background</strong> photo (new setting for everyone)</li>
+                    </ul>
+                  </div>
+                </div>
+              )}
+
               <button
                 onClick={generateMemoryImage}
-                disabled={!selectedScenario || uploadedPhotos.length < 2 || isGenerating}
+                disabled={!selectedScenario || uploadedPhotos.filter(p => p.type === 'current').length === 0 || uploadedPhotos.filter(p => p.type === 'historical').length === 0 || isGenerating}
                 className="w-full mt-6 bg-gradient-to-r from-purple-600 to-pink-600 text-white py-3 px-4 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:from-purple-700 hover:to-pink-700 transition-colors flex items-center justify-center"
               >
                 {isGenerating ? (
                   <>
                     <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                    Generating Memory...
+                    Editing Current Photo...
                   </>
                 ) : (
                   <>
                     <Wand2 className="h-4 w-4 mr-2" />
-                    Create Memory
+                    Add Historical Person(s)
                   </>
                 )}
               </button>
@@ -890,7 +956,7 @@ const MemoryResurrectionEngine = () => {
       }`}>
               <h2 className={darkMode ? 'text-xl font-bold text-white mb-4 flex items-center' : 'text-xl font-bold text-gray-900 mb-4 flex items-center'}>
                 <Users className="h-5 w-5 mr-2 text-green-500" />
-                Generated Memories
+                Edited Photos
               </h2>
               
               {generatedImages.length === 0 ? (
@@ -1014,8 +1080,49 @@ const MemoryResurrectionEngine = () => {
                         </div>
                         
                         <div className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'} bg-white rounded p-3`}>
-                          <p className="font-medium mb-1">Generation Details:</p>
-                          <p>Used {image.historicalPhotosUsed} historical and {image.currentPhotosUsed} current photos</p>
+                          <p className="font-medium mb-1">Editing Details:</p>
+                          <p>Added {image.historicalPhotosUsed} historical person(s) to {image.currentPhotosUsed} current photo(s)</p>
+                          {image.expectedPeopleCount && (
+                            <div className="mt-2">
+                              <p className="text-xs text-blue-600">
+                                Expected {image.expectedPeopleCount} people in final image
+                              </p>
+                              <div className="mt-1 p-2 bg-yellow-50 rounded text-xs">
+                                <p className="font-medium text-yellow-800">👁️ Quality Check:</p>
+                                <p className="text-yellow-700">
+                                  Can you see all {image.expectedPeopleCount} people with natural lighting and blending?
+                                </p>
+                                <div className="mt-1">
+                                  <p className="font-medium text-yellow-800">If historical person is missing:</p>
+                                  <ul className="text-yellow-600 ml-2">
+                                    <li>• <strong>Try again</strong> - Generate a new variation</li>
+                                    <li>• Enhance the historical photo first (⚡ button)</li>
+                                    <li>• Use a clearer historical photo with visible face</li>
+                                    <li>• Edit: "Add the missing historical person to the image"</li>
+                                    <li>• Edit: "Make sure all {image.expectedPeopleCount} people are visible"</li>
+                                  </ul>
+                                </div>
+                                <div className="mt-1">
+                                  <p className="font-medium text-yellow-800">If blending looks unnatural:</p>
+                                  <div className="ml-2 mb-2 p-2 bg-red-50 rounded text-xs">
+                                    <p className="font-medium text-red-800">⚠️ Important:</p>
+                                    <p className="text-red-700">Blending edits sometimes remove the historical person. If this happens, immediately edit with: "Add the missing historical person back to the image"</p>
+                                  </div>
+                                  <ul className="text-yellow-600 ml-2">
+                                    <li>• Edit: "Improve lighting to match everyone in the scene"</li>
+                                    <li>• Edit: "Create natural shadows for all people"</li>
+                                    <li>• Edit: "Blend skin tones while keeping all people visible"</li>
+                                    <li>• Edit: "Remove artificial edges but keep everyone in the image"</li>
+                                  </ul>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                          {image.metadata?.baseImageUsed && (
+                            <p className="text-xs text-gray-500 mt-1">
+                              Base image: {image.metadata.baseImageUsed}
+                            </p>
+                          )}
                           {image.description && (
                             <p className="mt-2 text-xs text-gray-500">{image.description}</p>
                           )}
@@ -1047,13 +1154,24 @@ const MemoryResurrectionEngine = () => {
                           {editingImageId === image.id && (
                             <div className="space-y-3">
                               <div>
-                                <p className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'} mb-2`}>Quick suggestions:</p>
+                                <div className="mb-3 p-2 bg-blue-50 rounded text-xs">
+                                <p className="font-medium text-blue-800 mb-1">💡 Safe Editing Workflow:</p>
+                                <ol className="text-blue-700 text-xs ml-2">
+                                  <li>1. First check: Can you see all {image.expectedPeopleCount || 'expected'} people?</li>
+                                  <li>2. If missing: "Add the missing historical person back"</li>
+                                  <li>3. If visible but unblended: Use "while keeping all people visible" phrases</li>
+                                  <li>4. If editing fails: Generate a Variation first</li>
+                                </ol>
+                              </div>
+                              <p className={`text-sm ${darkMode ? 'text-gray-300' : 'text-gray-600'} mb-2`}>Quick suggestions:</p>
                                 <div className="flex flex-wrap gap-2">
                                   {[
-                                    "Make the lighting warmer",
-                                    "Change the background setting",
-                                    "Apply vintage photo filter",
-                                    "Make expressions more joyful"
+                                    "Add the missing historical person back to the image",
+                                    `Make sure all ${image.expectedPeopleCount || 'expected'} people are visible`,
+                                    "Improve lighting to match everyone in the scene",
+                                    "Create natural shadows for all people",
+                                    "Blend skin tones while keeping all people visible",
+                                    "Remove artificial edges but keep everyone in the image"
                                   ].map(suggestion => (
                                     <button
                                       key={suggestion}
@@ -1104,12 +1222,12 @@ const MemoryResurrectionEngine = () => {
               )}
             </div>
             
-            {/* Conversation History */}
+            {/* Photo Editing History */}
             {conversationHistory.length > 0 && (
               <div className={`rounded-xl shadow-lg p-6 transition-colors duration-300 mt-6 ${
         darkMode ? 'bg-gray-800' : 'bg-white'
       }`}>
-                <h2 className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'} mb-4`}>Creation History</h2>
+                <h2 className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'} mb-4`}>Photo Editing History</h2>
                 <div className="space-y-3">
                   {conversationHistory.map((entry, index) => (
                     <div key={index} className="flex items-start space-x-3">

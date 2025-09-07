@@ -44,25 +44,45 @@ class MemoryResurrectionAPI {
 
   async resurrectMemory(historicalPhotos, currentPhotos, scenario, orientation = 'landscape', scenarioSettings = {}) {
     const startTime = Date.now();
-    console.log('Starting memory resurrection...', { historicalCount: historicalPhotos.length, currentCount: currentPhotos.length });
+    console.log('Starting memory resurrection via image editing...', { historicalCount: historicalPhotos.length, currentCount: currentPhotos.length });
     
     // Only use demo response if no API key is available
     if (this.demoMode && !this.genAI) {
       return this.generateDemoResponse(historicalPhotos, currentPhotos, scenario, startTime);
     }
 
+    // Validation: Must have at least 1 current photo to edit
+    if (currentPhotos.length === 0) {
+      return {
+        success: false,
+        error: 'At least one current photo is required as the base image to edit',
+        code: 'NO_CURRENT_PHOTO'
+      };
+    }
+
     try {
-      
       // Separate photos by type
       const backgroundPhotos = [...historicalPhotos, ...currentPhotos].filter(p => p.type === 'background');
-      const personPhotos = [...historicalPhotos, ...currentPhotos].filter(p => p.type !== 'background');
       
-      // Build proper content structure for Gemini
+      // Use the first current photo as the base image to edit
+      const baseCurrentPhoto = currentPhotos[0];
+      console.log('Using current photo as base for editing:', baseCurrentPhoto.name);
+      
+      // Build content structure: base current image first, then historical persons, then background if provided
       const parts = [];
       
-      // Add person photos first (historical + current)
-      for (let i = 0; i < personPhotos.length; i++) {
-        const photo = personPhotos[i];
+      // 1. Add the current photo as the base image to edit
+      const currentBase64 = await this.fileToBase64(baseCurrentPhoto.file);
+      parts.push({
+        inlineData: {
+          mimeType: baseCurrentPhoto.file.type,
+          data: currentBase64
+        }
+      });
+      
+      // 2. Add historical photos (persons to add to the current image)
+      for (let i = 0; i < historicalPhotos.length; i++) {
+        const photo = historicalPhotos[i];
         if (photo.file) {
           const base64 = await this.fileToBase64(photo.file);
           parts.push({
@@ -74,17 +94,19 @@ class MemoryResurrectionAPI {
         }
       }
       
-      // Add background photos last
-      for (let i = 0; i < backgroundPhotos.length; i++) {
-        const photo = backgroundPhotos[i];
-        if (photo.file) {
-          const base64 = await this.fileToBase64(photo.file);
-          parts.push({
-            inlineData: {
-              mimeType: photo.file.type,
-              data: base64
-            }
-          });
+      // 3. Add background photo if provided (to move everyone to new background)
+      if (backgroundPhotos.length > 0) {
+        for (let i = 0; i < backgroundPhotos.length; i++) {
+          const photo = backgroundPhotos[i];
+          if (photo.file) {
+            const base64 = await this.fileToBase64(photo.file);
+            parts.push({
+              inlineData: {
+                mimeType: photo.file.type,
+                data: base64
+              }
+            });
+          }
         }
       }
 
@@ -97,62 +119,24 @@ class MemoryResurrectionAPI {
         ...scenarioSettings
       };
 
-      const imageGenerationPrompt = `🚨 CRITICAL REQUIREMENTS: 
-1. ORIENTATION: Generate image in ${orientation.toUpperCase()} format ${orientation === 'landscape' ? '(WIDER than tall)' : orientation === 'portrait' ? '(TALLER than wide)' : '(SQUARE)'}
-2. PEOPLE: Include ONLY the ${personPhotos.length} people shown in the person photos. DO NOT CREATE ANY OTHER PEOPLE.
-3. CULTURAL STYLE: Use ${settings.culturalStyle} styling and aesthetics throughout the image
-4. NO INAPPROPRIATE CULTURAL BIAS: Do not default to Indian, South Asian, or any specific ethnic style unless explicitly requested
+      // Ultra-simple direct prompt focusing only on adding the person
+      const imageEditingPrompt = `TASK: Add the person from image 2 to image 1.
 
-❌ FORBIDDEN ACTIONS:
-- Adding graduates, wedding attendees, party guests, or family members not in uploaded photos
-- Creating generic people for the ${scenario.title.toLowerCase()} setting
-- Including background people, crowds, or additional relatives
-- Generating anyone not explicitly visible in the provided photos
+IMAGE 1: Current photo (${currentPhotos.length} people) - this is your base
+IMAGE 2: Historical person - ADD THIS PERSON to image 1
 
-✅ MANDATORY REQUIREMENTS:
-1. EXACT COUNT: Generate exactly ${historicalPhotos.length + currentPhotos.length} people - no more, no less
-2. HISTORICAL ACCURACY: People from the first ${historicalPhotos.length} photos must look identical to their uploaded images
-3. CURRENT ACCURACY: People from the next ${currentPhotos.length} photos must look identical to their uploaded images
-4. FACE MATCHING: Each person's face, hair, age, and features must precisely match their uploaded photo
-5. NO SUBSTITUTIONS: Do not replace any uploaded person with a generic or different-looking individual
+REQUIREMENT: The final image must show ${currentPhotos.length + historicalPhotos.length} people total.
 
-📸 PHOTO BREAKDOWN:
-- Images 1-${historicalPhotos.length}: HISTORICAL people (preserve their exact appearance)
-- Images ${historicalPhotos.length + 1}-${historicalPhotos.length + currentPhotos.length}: CURRENT people (preserve their exact appearance)
-- Total people to generate: EXACTLY ${historicalPhotos.length + currentPhotos.length}
+- Keep all ${currentPhotos.length} people from image 1 exactly as they are
+- Add the 1 person from image 2 to the scene  
+- Make the historical person fit naturally in the ${scenario.title.toLowerCase()} setting
+- Match the lighting so they don't look out of place
 
-🎬 SCENE CREATION:
-Create ${scenario.prompt.replace('{deceased_person}', 'the people from the historical photos')} showing these ${historicalPhotos.length + currentPhotos.length} specific individuals in a ${scenario.title.toLowerCase()} setting with ${scenario.emotionalTone} atmosphere.
-
-🎨 STYLE SPECIFICATIONS:
-- Cultural Style: ${settings.culturalStyle} aesthetics and design elements
-- Time Period: ${settings.timePeriod} styling for clothing, decor, and atmosphere
-- Clothing: ${settings.clothingStyle} attire appropriate for the occasion
-- Setting: ${settings.locationStyle} environment with proper lighting and composition
-- NO ETHNIC BIAS: Use neutral, ${settings.culturalStyle} styling unless specifically requested otherwise
-
-📐 CRITICAL IMAGE SPECIFICATIONS:
-- MANDATORY Orientation: MUST be ${orientation.toUpperCase()} format
-- REQUIRED Aspect Ratio: ${orientation === 'landscape' ? 'WIDER than tall (16:9 horizontal)' : orientation === 'portrait' ? 'TALLER than wide (9:16 vertical)' : 'Equal width and height (1:1 square)'}
-- ESSENTIAL Composition: Frame all ${historicalPhotos.length + currentPhotos.length} people clearly in ${orientation} layout
-- ${orientation === 'landscape' ? 'IMAGE MUST BE HORIZONTAL (width > height)' : orientation === 'portrait' ? 'IMAGE MUST BE VERTICAL (height > width)' : 'IMAGE MUST BE SQUARE (height = width)'}
-
-📋 VERIFICATION CHECKLIST:
-- ✓ Generated image contains exactly ${historicalPhotos.length + currentPhotos.length} people
-- ✓ Each person looks identical to their uploaded photo
-- ✓ No additional people added for context or atmosphere
-- ✓ Professional ${scenario.title.toLowerCase()} setting and lighting
-- ✓ ${scenario.emotionalTone} mood maintained
-- ✓ IMAGE IS DEFINITELY ${orientation.toUpperCase()} ORIENTATION
-
-🔍 FINAL VALIDATION: 
-1. Count the people in your generated image. It must be exactly ${historicalPhotos.length + currentPhotos.length}. 
-2. Each face must be recognizable from the uploaded photos.
-3. CONFIRM THE IMAGE IS ${orientation.toUpperCase()} ORIENTATION ${orientation === 'landscape' ? '(HORIZONTAL/WIDER)' : orientation === 'portrait' ? '(VERTICAL/TALLER)' : '(SQUARE)'} - This is MANDATORY!`;
+The historical person MUST be visible in your result. Do not skip adding them.`;
       
-      // Add text prompt as part
+      // Add the editing instruction
       parts.push({
-        text: imageGenerationPrompt
+        text: imageEditingPrompt
       });
 
       // Structure content properly for Gemini API
@@ -207,11 +191,14 @@ Create ${scenario.prompt.replace('{deceased_person}', 'the people from the histo
         processingTime: Date.now() - startTime,
         cost: 0.0387, // $30 per 1M tokens, 1 image = 1290 tokens
         aiDescription: description,
+        editingApproach: 'historical_person_addition',
+        expectedPeopleCount: currentPhotos.length + historicalPhotos.length,
         metadata: {
           historicalPhotosUsed: historicalPhotos.length,
           currentPhotosUsed: currentPhotos.length,
+          baseImageUsed: baseCurrentPhoto.name,
           scenario: scenario.title,
-          features: ['AI Image Generation', 'Family Photo Fusion', 'Scene Synthesis', 'Character Consistency']
+          features: ['Seamless Integration', 'Natural Lighting Adaptation', 'Shadow Matching', 'Photorealistic Blending', 'Environmental Context']
         }
       };
 
@@ -319,35 +306,107 @@ Create ${scenario.prompt.replace('{deceased_person}', 'the people from the histo
       // Build content structure for image editing
       const parts = [];
       
-      // Add the original image if it has base64 data
-      if (originalImage && originalImage.base64Data) {
+      // Validate and add the original image
+      if (!originalImage || !originalImage.base64Data) {
+        return {
+          success: false,
+          error: 'Invalid image data provided for editing. The image may be corrupted or in an unsupported format.',
+          code: 'INVALID_IMAGE_DATA'
+        };
+      }
+
+      // Validate base64 data
+      try {
+        // Check if base64 data is valid
+        if (!/^[A-Za-z0-9+/]*={0,2}$/.test(originalImage.base64Data)) {
+          throw new Error('Invalid base64 format');
+        }
+        
         parts.push({
           inlineData: {
             mimeType: originalImage.mimeType || 'image/png',
             data: originalImage.base64Data
           }
         });
+      } catch (error) {
+        console.error('Base64 validation failed:', error);
+        return {
+          success: false,
+          error: 'Image data is corrupted or invalid. Please try generating a new variation first.',
+          code: 'CORRUPTED_IMAGE_DATA'
+        };
       }
       
-      // Create edit prompt for image generation
-      const editGenerationPrompt = `CRITICAL: Edit this family photo based on the request: "${editPrompt}".
+      // Create specialized edit prompt based on the request type
+      let editGenerationPrompt;
+      
+      // Detect if this is a blending/lighting request
+      const isBlendingRequest = editPrompt.toLowerCase().includes('blend') || 
+                               editPrompt.toLowerCase().includes('lighting') || 
+                               editPrompt.toLowerCase().includes('shadow') || 
+                               editPrompt.toLowerCase().includes('natural') ||
+                               editPrompt.toLowerCase().includes('skin tone') ||
+                               editPrompt.toLowerCase().includes('artificial') ||
+                               editPrompt.toLowerCase().includes('cutout');
+      
+      // Detect if this is a request to add missing person
+      const isAddPersonRequest = editPrompt.toLowerCase().includes('add') && 
+                                 (editPrompt.toLowerCase().includes('person') || 
+                                  editPrompt.toLowerCase().includes('historical') ||
+                                  editPrompt.toLowerCase().includes('missing'));
 
-STRICT EDITING CONSTRAINTS:
-1. PRESERVE ORIENTATION: MUST maintain ${orientation.toUpperCase()} format ${orientation === 'landscape' ? '(WIDER than tall)' : orientation === 'portrait' ? '(TALLER than wide)' : '(SQUARE)'}
-2. PRESERVE ALL PEOPLE: Keep exactly the same people as in the original image - do not add or remove anyone
-3. MAINTAIN FACES: Each person must remain recognizable with the same facial features
-4. NO NEW PEOPLE: Do not add any additional family members or people not in the original
-5. APPLY EDIT ONLY: Apply only the specific requested change: ${editPrompt}
-6. CHARACTER CONSISTENCY: Maintain the exact same individuals throughout the edit
+      if (isBlendingRequest) {
+        // Special prompt for blending that emphasizes keeping everyone
+        editGenerationPrompt = `BLENDING TASK: Improve the visual integration in this image.
 
-EDITING REQUIREMENTS:
-- Apply the requested modification: ${editPrompt}
-- Keep all people exactly as they were (same faces, same individuals)
-- Maintain photorealistic quality and natural lighting
-- Preserve family member recognition
-- Keep the same number of people in the image
+CRITICAL - PRESERVE ALL PEOPLE:
+- Count the people in the original image - keep EXACTLY the same number
+- Do NOT remove anyone, especially the historical person
+- Every face must remain visible and recognizable
 
-FINAL CHECK: The edited image must contain the exact same people as the original - no additions, no removals, just the requested edit applied.`;
+BLENDING IMPROVEMENTS TO APPLY:
+- ${editPrompt}
+- Match lighting across all people in the image
+- Create natural shadows for everyone
+- Blend skin tones to match the environment
+- Remove any artificial edges or cutout appearance
+- Make everyone look like they belong in the same scene
+
+ABSOLUTELY FORBIDDEN:
+- Removing any person from the image
+- Hiding anyone behind others
+- Making anyone less visible
+- Changing the number of people
+
+RESULT: Same people, better blending and lighting.`;
+
+      } else if (isAddPersonRequest) {
+        // Special prompt for adding missing historical person
+        editGenerationPrompt = `RESTORATION TASK: Add the missing historical person back to this image.
+
+WHAT HAPPENED: The historical person was accidentally removed or hidden.
+
+CORRECTION NEEDED:
+- Add the historical person back to the scene
+- Position them naturally within the group
+- Match their lighting to the current environment
+- Blend them seamlessly with the existing people
+- ${editPrompt}
+
+FINAL RESULT: All original people should be visible again.`;
+
+      } else {
+        // General editing prompt
+        editGenerationPrompt = `EDITING TASK: "${editPrompt}"
+
+CRITICAL CONSTRAINTS:
+1. PRESERVE ALL PEOPLE: Keep exactly the same people as in the original image
+2. NO REMOVALS: Do not remove or hide anyone 
+3. MAINTAIN FACES: Each person must remain recognizable
+4. APPLY MODIFICATION: ${editPrompt}
+
+The edited image must contain the exact same people as the original.`;
+      }
 
       parts.push({
         text: editGenerationPrompt
