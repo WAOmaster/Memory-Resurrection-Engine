@@ -42,7 +42,7 @@ class MemoryResurrectionAPI {
     });
   }
 
-  async resurrectMemory(historicalPhotos, currentPhotos, scenario, orientation = 'landscape', scenarioSettings = {}) {
+  async resurrectMemory(historicalPhotos, currentPhotos, scenario, orientation = 'landscape') {
     const startTime = Date.now();
     console.log('Starting memory resurrection...', { historicalCount: historicalPhotos.length, currentCount: currentPhotos.length });
     
@@ -57,108 +57,32 @@ class MemoryResurrectionAPI {
       const backgroundPhotos = [...historicalPhotos, ...currentPhotos].filter(p => p.type === 'background');
       const personPhotos = [...historicalPhotos, ...currentPhotos].filter(p => p.type !== 'background');
       
-      // Build proper content structure for Gemini
-      const parts = [];
+      // Build content following hackathon kit pattern: text first, then images
+      const imageGenerationPrompt = `Create a photorealistic ${orientation} image showing these ${personPhotos.length} people ${scenario.prompt.replace('{deceased_person}', 'from the historical photos')}. Make each person look exactly as they appear in their uploaded photo - same facial features, hair, age, and appearance. Set in a ${scenario.emotionalTone} ${scenario.title.toLowerCase()} scene with natural lighting.`;
       
-      // Add person photos first (historical + current)
-      for (let i = 0; i < personPhotos.length; i++) {
-        const photo = personPhotos[i];
+      const parts = [
+        { text: imageGenerationPrompt }
+      ];
+      
+      // Add all photos following hackathon kit pattern
+      const allPhotos = [...personPhotos, ...backgroundPhotos];
+      for (let i = 0; i < allPhotos.length; i++) {
+        const photo = allPhotos[i];
         if (photo.file) {
-          const base64 = await this.fileToBase64(photo.file);
-          parts.push({
-            inlineData: {
-              mimeType: photo.file.type,
-              data: base64
-            }
-          });
+          try {
+            const base64 = await this.fileToBase64(photo.file);
+            parts.push({
+              inlineData: {
+                mimeType: photo.file.type,
+                data: base64
+              }
+            });
+          } catch (error) {
+            console.error(`Failed to process photo ${photo.name}:`, error);
+            // Continue with other photos if one fails
+          }
         }
       }
-      
-      // Add background photos last
-      for (let i = 0; i < backgroundPhotos.length; i++) {
-        const photo = backgroundPhotos[i];
-        if (photo.file) {
-          const base64 = await this.fileToBase64(photo.file);
-          parts.push({
-            inlineData: {
-              mimeType: photo.file.type,
-              data: base64
-            }
-          });
-        }
-      }
-
-      // Default scenario settings if not provided
-      const settings = {
-        culturalStyle: 'western',
-        timePeriod: 'modern',
-        clothingStyle: 'formal',
-        locationStyle: 'indoor',
-        ...scenarioSettings
-      };
-
-      const imageGenerationPrompt = `🚨 CRITICAL REQUIREMENTS: 
-1. ORIENTATION: Generate image in ${orientation.toUpperCase()} format ${orientation === 'landscape' ? '(WIDER than tall)' : orientation === 'portrait' ? '(TALLER than wide)' : '(SQUARE)'}
-2. PEOPLE: Include ONLY the ${personPhotos.length} people shown in the person photos. DO NOT CREATE ANY OTHER PEOPLE.
-3. CULTURAL STYLE: Use ${settings.culturalStyle} styling and aesthetics throughout the image
-4. NO INAPPROPRIATE CULTURAL BIAS: Do not default to Indian, South Asian, or any specific ethnic style unless explicitly requested
-
-❌ FORBIDDEN ACTIONS:
-- Adding graduates, wedding attendees, party guests, or family members not in uploaded photos
-- Creating generic people for the ${scenario.title.toLowerCase()} setting
-- Including background people, crowds, or additional relatives
-- Generating anyone not explicitly visible in the provided photos
-
-✅ MANDATORY REQUIREMENTS:
-1. EXACT COUNT: Generate exactly ${historicalPhotos.length + currentPhotos.length} people - no more, no less
-2. HISTORICAL ACCURACY: People from the first ${historicalPhotos.length} photos must look identical to their uploaded images
-3. CURRENT ACCURACY: People from the next ${currentPhotos.length} photos must look identical to their uploaded images
-4. FACE MATCHING: Each person's face, hair, age, and features must precisely match their uploaded photo
-5. NO SUBSTITUTIONS: Do not replace any uploaded person with a generic or different-looking individual
-
-📸 PHOTO BREAKDOWN:
-- Images 1-${historicalPhotos.length}: HISTORICAL people (preserve their exact appearance)
-- Images ${historicalPhotos.length + 1}-${historicalPhotos.length + currentPhotos.length}: CURRENT people (preserve their exact appearance)
-- Total people to generate: EXACTLY ${historicalPhotos.length + currentPhotos.length}
-
-🎬 SCENE CREATION:
-Create ${scenario.prompt.replace('{deceased_person}', 'the people from the historical photos')} showing these ${historicalPhotos.length + currentPhotos.length} specific individuals in a ${scenario.title.toLowerCase()} setting with ${scenario.emotionalTone} atmosphere.
-
-🎨 STYLE SPECIFICATIONS:
-- Cultural Style: ${settings.culturalStyle} aesthetics and design elements
-- Time Period: ${settings.timePeriod} styling for clothing, decor, and atmosphere
-- Clothing: ${settings.clothingStyle} attire appropriate for the occasion
-- Setting: ${settings.locationStyle} environment with proper lighting and composition
-- NO ETHNIC BIAS: Use neutral, ${settings.culturalStyle} styling unless specifically requested otherwise
-
-📐 CRITICAL IMAGE SPECIFICATIONS:
-- MANDATORY Orientation: MUST be ${orientation.toUpperCase()} format
-- REQUIRED Aspect Ratio: ${orientation === 'landscape' ? 'WIDER than tall (16:9 horizontal)' : orientation === 'portrait' ? 'TALLER than wide (9:16 vertical)' : 'Equal width and height (1:1 square)'}
-- ESSENTIAL Composition: Frame all ${historicalPhotos.length + currentPhotos.length} people clearly in ${orientation} layout
-- ${orientation === 'landscape' ? 'IMAGE MUST BE HORIZONTAL (width > height)' : orientation === 'portrait' ? 'IMAGE MUST BE VERTICAL (height > width)' : 'IMAGE MUST BE SQUARE (height = width)'}
-
-📋 VERIFICATION CHECKLIST:
-- ✓ Generated image contains exactly ${historicalPhotos.length + currentPhotos.length} people
-- ✓ Each person looks identical to their uploaded photo
-- ✓ No additional people added for context or atmosphere
-- ✓ Professional ${scenario.title.toLowerCase()} setting and lighting
-- ✓ ${scenario.emotionalTone} mood maintained
-- ✓ IMAGE IS DEFINITELY ${orientation.toUpperCase()} ORIENTATION
-
-🔍 FINAL VALIDATION: 
-1. Count the people in your generated image. It must be exactly ${historicalPhotos.length + currentPhotos.length}. 
-2. Each face must be recognizable from the uploaded photos.
-3. CONFIRM THE IMAGE IS ${orientation.toUpperCase()} ORIENTATION ${orientation === 'landscape' ? '(HORIZONTAL/WIDER)' : orientation === 'portrait' ? '(VERTICAL/TALLER)' : '(SQUARE)'} - This is MANDATORY!`;
-      
-      // Add text prompt as part
-      parts.push({
-        text: imageGenerationPrompt
-      });
-
-      // Structure content properly for Gemini API
-      const contents = [{
-        parts: parts
-      }];
 
       console.log('Calling Gemini API for image generation...');
       console.log('Using model:', this.model);
@@ -169,13 +93,8 @@ Create ${scenario.prompt.replace('{deceased_person}', 'the people from the histo
         model: this.model
       });
       
-      const result = await model.generateContent({
-        contents: contents,
-        generationConfig: {
-          maxOutputTokens: 1290, // Standard for 1 image generation
-          temperature: 0.7,
-        }
-      });
+      // Following hackathon kit structure: use generateContent with parts array
+      const result = await model.generateContent(parts);
       const response = await result.response;
       
       // Debug: Log the full response structure
@@ -308,6 +227,122 @@ Create ${scenario.prompt.replace('{deceased_person}', 'the people from the histo
     };
   }
 
+  async startChatSession() {
+    // Initialize a new chat session for conversational editing
+    if (this.demoMode && !this.genAI) {
+      return {
+        success: true,
+        sessionId: 'demo-session-' + Date.now(),
+        demoMode: true
+      };
+    }
+
+    try {
+      const model = this.genAI.getGenerativeModel({ 
+        model: this.model
+      });
+      
+      const chat = model.startChat({
+        generationConfig: {
+          maxOutputTokens: 1290,
+          temperature: 0.7,
+        },
+        history: []
+      });
+      
+      return {
+        success: true,
+        chat: chat,
+        sessionId: 'session-' + Date.now()
+      };
+    } catch (error) {
+      console.error('Failed to start chat session:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  async editMemoryWithChat(chatSession, originalImage, editPrompt, conversationHistory = [], orientation = 'landscape') {
+    if (this.demoMode && !this.genAI) {
+      return this.generateDemoEditResponse(editPrompt);
+    }
+
+    try {
+      console.log('Starting conversational memory edit...', { editPrompt });
+      
+      // Build content structure for conversational image editing
+      const parts = [];
+      
+      // Add the original image if it has base64 data
+      if (originalImage && originalImage.base64Data) {
+        parts.push({
+          inlineData: {
+            mimeType: originalImage.mimeType || 'image/png',
+            data: originalImage.base64Data
+          }
+        });
+      }
+      
+      // Create conversational edit prompt that maintains context
+      let contextualPrompt = editPrompt;
+      if (conversationHistory.length > 0) {
+        const recentEdits = conversationHistory
+          .filter(entry => entry.type === 'edit')
+          .slice(-3)
+          .map(entry => entry.content)
+          .join(', ');
+        contextualPrompt = `Following previous edits (${recentEdits}), now: ${editPrompt}. Maintain the same people and their appearances while making this specific change.`;
+      } else {
+        contextualPrompt = `${editPrompt}. Keep the people exactly as they appear in the original image - same faces, same appearance.`;
+      }
+
+      parts.push({
+        text: contextualPrompt
+      });
+
+      // Use chat session for conversational continuity
+      const result = await chatSession.chat.sendMessage(parts);
+      const response = await result.response;
+      
+      // Debug log the response
+      console.log('Conversational edit API response:', response);
+      
+      // Try to extract edited image from response
+      let editedImage;
+      let description = '';
+      
+      try {
+        editedImage = this.extractImageFromResponse(response);
+        console.log('Successfully extracted edited image from conversational chat');
+        description = 'AI-edited family reunion image via conversation';
+      } catch (imageError) {
+        console.log('No edited image in response:', imageError.message);
+        description = response.text();
+        console.log('Edit description:', description);
+        // Create visual representation as fallback
+        editedImage = this.createEditedVisualization(editPrompt, description);
+      }
+      
+      return {
+        success: true,
+        image: editedImage,
+        editApplied: editPrompt,
+        editDescription: description,
+        conversationContext: conversationHistory.length + 1,
+        cost: 0.0387
+      };
+
+    } catch (error) {
+      console.error('Conversational memory edit failed:', error);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
   async editMemory(originalImage, editPrompt, conversationHistory = [], orientation = 'landscape') {
     if (this.demoMode && !this.genAI) {
       return this.generateDemoEditResponse(editPrompt);
@@ -330,45 +365,22 @@ Create ${scenario.prompt.replace('{deceased_person}', 'the people from the histo
       }
       
       // Create edit prompt for image generation
-      const editGenerationPrompt = `CRITICAL: Edit this family photo based on the request: "${editPrompt}".
-
-STRICT EDITING CONSTRAINTS:
-1. PRESERVE ORIENTATION: MUST maintain ${orientation.toUpperCase()} format ${orientation === 'landscape' ? '(WIDER than tall)' : orientation === 'portrait' ? '(TALLER than wide)' : '(SQUARE)'}
-2. PRESERVE ALL PEOPLE: Keep exactly the same people as in the original image - do not add or remove anyone
-3. MAINTAIN FACES: Each person must remain recognizable with the same facial features
-4. NO NEW PEOPLE: Do not add any additional family members or people not in the original
-5. APPLY EDIT ONLY: Apply only the specific requested change: ${editPrompt}
-6. CHARACTER CONSISTENCY: Maintain the exact same individuals throughout the edit
-
-EDITING REQUIREMENTS:
-- Apply the requested modification: ${editPrompt}
-- Keep all people exactly as they were (same faces, same individuals)
-- Maintain photorealistic quality and natural lighting
-- Preserve family member recognition
-- Keep the same number of people in the image
-
-FINAL CHECK: The edited image must contain the exact same people as the original - no additions, no removals, just the requested edit applied.`;
+      const editGenerationPrompt = `${editPrompt}. Leave the people unchanged - same faces, same appearance.`;
 
       parts.push({
         text: editGenerationPrompt
       });
 
-      const contents = [{
-        parts: parts
-      }];
-
       console.log('Calling Gemini API for image editing...');
       const model = this.genAI.getGenerativeModel({ 
-        model: this.model
-      });
-      
-      const result = await model.generateContent({
-        contents: contents,
+        model: this.model,
         generationConfig: {
           maxOutputTokens: 1290,
           temperature: 0.7,
         }
       });
+      
+      const result = await model.generateContent(parts);
       
       const response = await result.response;
       
@@ -612,7 +624,7 @@ FAMILY INTEGRATION DETAILS:
     return results;
   }
 
-  async enhanceHistoricalPhoto(photo) {
+  async enhanceHistoricalPhoto(photo, customPrompt = null) {
     if (this.demoMode && !this.genAI) {
       return this.generateDemoEnhancementResponse();
     }
@@ -622,26 +634,9 @@ FAMILY INTEGRATION DETAILS:
       
       const base64 = await this.fileToBase64(photo.file);
       
-      const enhancementPrompt = `CRITICAL: Enhance this historical photograph to improve face clarity and detail while preserving authenticity.
+      const enhancementPrompt = customPrompt || `Restore and enhance this historical photograph. Improve sharpness and clarity while keeping the person exactly the same.`;
 
-ENHANCEMENT REQUIREMENTS:
-1. FACE CLARITY: Sharpen and clarify facial features, eyes, nose, mouth details
-2. PRESERVE AUTHENTICITY: Maintain the original historical appearance - do not modernize
-3. NOISE REDUCTION: Reduce grain, scratches, and blur while keeping natural texture
-4. CONTRAST OPTIMIZATION: Improve contrast to make faces more visible and distinct
-5. DETAIL ENHANCEMENT: Enhance hair, clothing, and background details for better recognition
-6. NO ALTERATIONS: Do not change facial structure, add missing parts, or modify expressions
-7. MAINTAIN ERA: Keep the historical time period appearance intact
-
-TECHNICAL SPECIFICATIONS:
-- Output high-resolution enhanced version of the same image
-- Focus on facial recognition improvement
-- Preserve original composition and poses
-- Maintain historical authenticity and time period accuracy
-- Do not add modern elements or artificial enhancement effects
-
-Generate an enhanced version of this historical photograph optimized for facial recognition while maintaining complete historical authenticity.`;
-
+      // Following hackathon kit pattern: image first, then text
       const parts = [{
         inlineData: {
           mimeType: photo.file.type,
@@ -651,21 +646,15 @@ Generate an enhanced version of this historical photograph optimized for facial 
         text: enhancementPrompt
       }];
 
-      const contents = [{
-        parts: parts
-      }];
-
       const model = this.genAI.getGenerativeModel({ 
-        model: this.model
-      });
-      
-      const result = await model.generateContent({
-        contents: contents,
+        model: this.model,
         generationConfig: {
           maxOutputTokens: 1290,
           temperature: 0.3, // Lower temperature for consistent enhancement
         }
       });
+      
+      const result = await model.generateContent(parts);
       
       const response = await result.response;
       

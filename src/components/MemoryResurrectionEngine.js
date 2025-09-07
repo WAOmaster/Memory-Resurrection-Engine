@@ -10,18 +10,16 @@ const MemoryResurrectionEngine = () => {
   const [conversationHistory, setConversationHistory] = useState([]);
   const [editPrompt, setEditPrompt] = useState('');
   const [editingImageId, setEditingImageId] = useState(null);
+  const [chatSessions, setChatSessions] = useState(new Map()); // Store chat sessions per image
   const [showDownloadOptions, setShowDownloadOptions] = useState(null);
   const [imageOrientation, setImageOrientation] = useState('landscape');
   const [enhancingPhotos, setEnhancingPhotos] = useState(new Set());
   const [demoMode, setDemoMode] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
-  const [showAdvancedControls, setShowAdvancedControls] = useState(false);
-  const [scenarioSettings, setScenarioSettings] = useState({
-    culturalStyle: 'western',
-    timePeriod: 'modern',
-    clothingStyle: 'formal',
-    locationStyle: 'indoor'
-  });
+  const [showRestorationPopup, setShowRestorationPopup] = useState(false);
+  const [restorationPhotoId, setRestorationPhotoId] = useState(null);
+  const [restorationInput, setRestorationInput] = useState('');
+  const [zoomedImage, setZoomedImage] = useState(null);
   const fileInputRef = useRef(null);
 
   const memoryAPI = new MemoryResurrectionAPI(process.env.REACT_APP_GEMINI_API_KEY);
@@ -42,6 +40,24 @@ const MemoryResurrectionEngine = () => {
       return () => document.removeEventListener('click', handleClickOutside);
     }
   }, [showDownloadOptions]);
+
+  // Handle escape key for image zoom
+  useEffect(() => {
+    const handleEscapeKey = (event) => {
+      if (event.key === 'Escape' && zoomedImage) {
+        setZoomedImage(null);
+      }
+    };
+
+    if (zoomedImage) {
+      document.addEventListener('keydown', handleEscapeKey);
+      document.body.style.overflow = 'hidden'; // Prevent background scroll
+      return () => {
+        document.removeEventListener('keydown', handleEscapeKey);
+        document.body.style.overflow = 'unset';
+      };
+    }
+  }, [zoomedImage]);
 
   const scenarios = [
     {
@@ -120,7 +136,7 @@ const MemoryResurrectionEngine = () => {
         url,
         file,
         type,
-        autoDetected: true
+        autoDetected: false
       };
     } catch (error) {
       console.error(`Failed to load demo photo ${name}:`, error);
@@ -138,6 +154,14 @@ const MemoryResurrectionEngine = () => {
 
   const toggleDarkMode = () => {
     setDarkMode(!darkMode);
+  };
+
+  const openImageZoom = (image) => {
+    setZoomedImage(image);
+  };
+
+  const closeImageZoom = () => {
+    setZoomedImage(null);
   };
 
   const handlePhotoUpload = (event) => {
@@ -158,19 +182,16 @@ const MemoryResurrectionEngine = () => {
           canvas.width = img.width * ratio;
           canvas.height = img.height * ratio;
           
-          // Draw and analyze image
+          // Draw image
           ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          
-          // Auto-detect photo type
-          const detectedType = detectPhotoType(file, canvas, ctx);
           
           const newPhoto = {
             id: Date.now() + Math.random(),
             name: file.name,
             url: e.target.result,
             file: file,
-            type: detectedType,
-            autoDetected: true
+            type: 'current', // Default type - user must manually change if needed
+            autoDetected: false
           };
           setUploadedPhotos(prev => [...prev, newPhoto]);
         };
@@ -209,7 +230,7 @@ const MemoryResurrectionEngine = () => {
         
         setGeneratedImages(prev => [generatedImage, ...prev]);
       } else {
-        const result = await memoryAPI.resurrectMemory(historicalPhotos, currentPhotos, scenario, imageOrientation, scenarioSettings);
+        const result = await memoryAPI.resurrectMemory(historicalPhotos, currentPhotos, scenario, imageOrientation);
         
         if (result.success) {
           const generatedImage = {
@@ -247,6 +268,22 @@ const MemoryResurrectionEngine = () => {
     }
   };
 
+  const initializeChatSession = async (imageId) => {
+    if (chatSessions.has(imageId)) {
+      return chatSessions.get(imageId);
+    }
+    
+    const sessionResult = await memoryAPI.startChatSession();
+    if (sessionResult.success) {
+      const newSessions = new Map(chatSessions);
+      newSessions.set(imageId, sessionResult);
+      setChatSessions(newSessions);
+      return sessionResult;
+    }
+    
+    return null;
+  };
+
   const handleEditRequest = async (targetImage = null) => {
     if (!editPrompt.trim()) return;
     
@@ -265,17 +302,34 @@ const MemoryResurrectionEngine = () => {
           editHistory: [...(imageToEdit.editHistory || []), editPrompt],
           lastEdit: editPrompt,
           timestamp: new Date(),
-          processingTime: "3.5 seconds"
+          processingTime: "3.5 seconds",
+          conversationalEdits: (imageToEdit.conversationalEdits || 0) + 1
         };
         
         setGeneratedImages(prev => [updatedImage, ...prev.filter(img => img.id !== imageToEdit.id)]);
       } else {
-        const result = await memoryAPI.editMemory(
-          { base64Data: imageToEdit.url.split(',')[1] },
-          editPrompt,
-          conversationHistory,
-          imageOrientation
-        );
+        // Initialize or get existing chat session for this image
+        const chatSession = await initializeChatSession(imageToEdit.id);
+        
+        let result;
+        if (chatSession && !chatSession.demoMode) {
+          // Use conversational editing with chat session
+          result = await memoryAPI.editMemoryWithChat(
+            chatSession,
+            { base64Data: imageToEdit.url.split(',')[1] },
+            editPrompt,
+            imageToEdit.editHistory || [],
+            imageOrientation
+          );
+        } else {
+          // Fallback to regular editing
+          result = await memoryAPI.editMemory(
+            { base64Data: imageToEdit.url.split(',')[1] },
+            editPrompt,
+            conversationHistory,
+            imageOrientation
+          );
+        }
         
         if (result.success) {
           const updatedImage = {
@@ -285,7 +339,9 @@ const MemoryResurrectionEngine = () => {
             editHistory: [...(imageToEdit.editHistory || []), editPrompt],
             lastEdit: editPrompt,
             timestamp: new Date(),
-            processingTime: "API processing time"
+            processingTime: "API processing time",
+            conversationalEdits: (imageToEdit.conversationalEdits || 0) + 1,
+            conversationContext: result.conversationContext
           };
           
           setGeneratedImages(prev => [updatedImage, ...prev.filter(img => img.id !== imageToEdit.id)]);
@@ -295,6 +351,7 @@ const MemoryResurrectionEngine = () => {
       setConversationHistory(prev => [...prev, {
         type: 'edit',
         content: editPrompt,
+        imageId: imageToEdit.id,
         timestamp: new Date()
       }]);
       
@@ -384,7 +441,7 @@ const MemoryResurrectionEngine = () => {
           
           setGeneratedImages(prev => [variationImage, ...prev]);
         } else {
-          const result = await memoryAPI.resurrectMemory(historicalPhotos, currentPhotos, scenario, imageOrientation, scenarioSettings);
+          const result = await memoryAPI.resurrectMemory(historicalPhotos, currentPhotos, scenario, imageOrientation);
           
           if (result.success) {
             const variationImage = {
@@ -449,47 +506,6 @@ const MemoryResurrectionEngine = () => {
     );
   };
 
-  const detectPhotoType = (file, canvas, ctx) => {
-    // Auto-detect photo type based on image characteristics
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const pixels = imageData.data;
-    
-    let totalBrightness = 0;
-    let colorVariance = 0;
-    let sepiaCount = 0;
-    
-    for (let i = 0; i < pixels.length; i += 4) {
-      const r = pixels[i];
-      const g = pixels[i + 1];
-      const b = pixels[i + 2];
-      
-      // Calculate brightness
-      const brightness = (r + g + b) / 3;
-      totalBrightness += brightness;
-      
-      // Check for sepia/vintage colors (historical indicator)
-      const isSepia = (r > g && g > b && r - b > 30 && g - b > 10);
-      if (isSepia) sepiaCount++;
-      
-      // Calculate color variance (low variance might indicate background)
-      const variance = Math.abs(r - g) + Math.abs(g - b) + Math.abs(r - b);
-      colorVariance += variance;
-    }
-    
-    const pixelCount = pixels.length / 4;
-    const avgBrightness = totalBrightness / pixelCount;
-    const avgColorVariance = colorVariance / pixelCount;
-    const sepiaRatio = sepiaCount / pixelCount;
-    
-    // Decision logic
-    if (sepiaRatio > 0.3 || avgBrightness < 100) {
-      return 'historical'; // Sepia or dark/vintage looking
-    } else if (avgColorVariance < 20) {
-      return 'background'; // Low color variance, likely background/landscape
-    } else {
-      return 'current'; // Default to current for colorful, bright images
-    }
-  };
 
   const removePhoto = (photoId) => {
     setUploadedPhotos(prev => prev.filter(photo => photo.id !== photoId));
@@ -516,19 +532,28 @@ const MemoryResurrectionEngine = () => {
     input.click();
   };
 
-  const enhancePhoto = async (photoId) => {
-    const photo = uploadedPhotos.find(p => p.id === photoId);
-    if (!photo || enhancingPhotos.has(photoId)) return;
+  const enhancePhoto = (photoId) => {
+    setRestorationPhotoId(photoId);
+    setRestorationInput('Restore and enhance this historical photograph');
+    setShowRestorationPopup(true);
+  };
 
-    setEnhancingPhotos(prev => new Set([...prev, photoId]));
+  const executePhotoRestoration = async () => {
+    if (!restorationPhotoId || !restorationInput.trim()) return;
+    
+    const photo = uploadedPhotos.find(p => p.id === restorationPhotoId);
+    if (!photo || enhancingPhotos.has(restorationPhotoId)) return;
+
+    setEnhancingPhotos(prev => new Set([...prev, restorationPhotoId]));
+    setShowRestorationPopup(false);
 
     try {
-      // Use Gemini AI to enhance the historical photo for better face detection
-      const result = await memoryAPI.enhanceHistoricalPhoto(photo);
+      // Use Gemini AI to enhance the historical photo with custom input
+      const result = await memoryAPI.enhanceHistoricalPhoto(photo, restorationInput);
       
       if (result.success) {
         setUploadedPhotos(prev => prev.map(p => 
-          p.id === photoId 
+          p.id === restorationPhotoId 
             ? { ...p, url: result.enhancedImage.url, enhanced: true }
             : p
         ));
@@ -541,9 +566,11 @@ const MemoryResurrectionEngine = () => {
     } finally {
       setEnhancingPhotos(prev => {
         const newSet = new Set(prev);
-        newSet.delete(photoId);
+        newSet.delete(restorationPhotoId);
         return newSet;
       });
+      setRestorationPhotoId(null);
+      setRestorationInput('');
     }
   };
 
@@ -631,7 +658,7 @@ const MemoryResurrectionEngine = () => {
                 >
                   <Camera className="h-12 w-12 text-gray-400 mx-auto mb-2" />
                   <p className={darkMode ? 'text-gray-300' : 'text-gray-600'}>Click to upload photos</p>
-                  <p className="text-sm text-gray-400">Historical & current family photos</p>
+                  <p className="text-sm text-gray-400">Upload photos - you'll choose the type for each</p>
                 </button>
                 
                 <input
@@ -668,7 +695,6 @@ const MemoryResurrectionEngine = () => {
                             title="Click to cycle: Current → Historical → Background"
                           >
                             {photo.type === 'historical' ? 'Historical' : photo.type === 'background' ? 'Background' : 'Current'}
-                            {photo.autoDetected && <span className="ml-1">🔍</span>}
                           </button>
 
                           {/* Enhancement Badge */}
@@ -746,121 +772,18 @@ const MemoryResurrectionEngine = () => {
                 ))}
               </div>
 
-              {/* Image Orientation Selection */}
-              <div className="mt-4 p-3 bg-gray-50 rounded-lg">
-                <h4 className={`font-medium ${darkMode ? 'text-white' : 'text-gray-900'} mb-2`}>Image Orientation</h4>
-                <div className="flex space-x-3">
-                  <button
-                    onClick={() => setImageOrientation('landscape')}
-                    className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                      imageOrientation === 'landscape'
-                        ? 'bg-purple-600 text-white'
-                        : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-                    }`}
-                  >
-                    <span className="w-4 h-3 bg-current rounded mr-2 opacity-60"></span>
-                    Landscape (16:9)
-                  </button>
-                  <button
-                    onClick={() => setImageOrientation('portrait')}
-                    className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                      imageOrientation === 'portrait'
-                        ? 'bg-purple-600 text-white'
-                        : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-                    }`}
-                  >
-                    <span className="w-3 h-4 bg-current rounded mr-2 opacity-60"></span>
-                    Portrait (9:16)
-                  </button>
-                  <button
-                    onClick={() => setImageOrientation('square')}
-                    className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                      imageOrientation === 'square'
-                        ? 'bg-purple-600 text-white'
-                        : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-                    }`}
-                  >
-                    <span className="w-3 h-3 bg-current rounded mr-2 opacity-60"></span>
-                    Square (1:1)
-                  </button>
-                </div>
-              </div>
 
-              {/* Advanced Scenario Controls */}
-              <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className={`font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>Advanced Scenario Settings</h4>
-                  <button
-                    onClick={() => setShowAdvancedControls(!showAdvancedControls)}
-                    className="text-blue-600 hover:text-blue-700 text-sm font-medium"
-                  >
-                    {showAdvancedControls ? 'Hide' : 'Show'} Controls
-                  </button>
-                </div>
-                
-                {showAdvancedControls && (
-                  <div className="grid grid-cols-2 gap-3 mt-3">
-                    {/* Cultural Style */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Cultural Style</label>
-                      <select
-                        value={scenarioSettings.culturalStyle}
-                        onChange={(e) => setScenarioSettings({...scenarioSettings, culturalStyle: e.target.value})}
-                        className="w-full text-xs border border-gray-300 rounded px-2 py-1"
-                      >
-                        <option value="western">Western</option>
-                        <option value="traditional">Traditional</option>
-                        <option value="multicultural">Multicultural</option>
-                        <option value="vintage">Vintage</option>
-                      </select>
-                    </div>
-
-                    {/* Time Period */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Time Period</label>
-                      <select
-                        value={scenarioSettings.timePeriod}
-                        onChange={(e) => setScenarioSettings({...scenarioSettings, timePeriod: e.target.value})}
-                        className="w-full text-xs border border-gray-300 rounded px-2 py-1"
-                      >
-                        <option value="modern">Modern (2020s)</option>
-                        <option value="contemporary">Contemporary (2000s)</option>
-                        <option value="classic">Classic (1980s-90s)</option>
-                        <option value="vintage">Vintage (1950s-70s)</option>
-                      </select>
-                    </div>
-
-                    {/* Clothing Style */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Clothing Style</label>
-                      <select
-                        value={scenarioSettings.clothingStyle}
-                        onChange={(e) => setScenarioSettings({...scenarioSettings, clothingStyle: e.target.value})}
-                        className="w-full text-xs border border-gray-300 rounded px-2 py-1"
-                      >
-                        <option value="formal">Formal</option>
-                        <option value="semi-formal">Semi-formal</option>
-                        <option value="casual">Casual</option>
-                        <option value="elegant">Elegant</option>
-                      </select>
-                    </div>
-
-                    {/* Location Style */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Setting</label>
-                      <select
-                        value={scenarioSettings.locationStyle}
-                        onChange={(e) => setScenarioSettings({...scenarioSettings, locationStyle: e.target.value})}
-                        className="w-full text-xs border border-gray-300 rounded px-2 py-1"
-                      >
-                        <option value="indoor">Indoor</option>
-                        <option value="outdoor">Outdoor</option>
-                        <option value="studio">Studio</option>
-                        <option value="natural">Natural Setting</option>
-                      </select>
-                    </div>
+              {/* Character Replication Guarantee */}
+              <div className="mt-4 p-3 bg-green-50 rounded-lg border border-green-200">
+                <div className="flex items-center">
+                  <Wand2 className="h-5 w-5 text-green-600 mr-2" />
+                  <div>
+                    <h4 className="text-sm font-medium text-green-800">Exact Character Replication</h4>
+                    <p className="text-xs text-green-700 mt-1">
+                      Your uploaded characters will appear exactly as they look in your photos - no creative interpretations, just perfect matching.
+                    </p>
                   </div>
-                )}
+                </div>
               </div>
               
               <button
@@ -871,12 +794,12 @@ const MemoryResurrectionEngine = () => {
                 {isGenerating ? (
                   <>
                     <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                    Generating Memory...
+                    Generating with Exact Characters...
                   </>
                 ) : (
                   <>
                     <Wand2 className="h-4 w-4 mr-2" />
-                    Create Memory
+                    Generate Memory with Exact Characters
                   </>
                 )}
               </button>
@@ -908,6 +831,11 @@ const MemoryResurrectionEngine = () => {
                           <h3 className={`font-medium ${darkMode ? 'text-white' : 'text-gray-900'} flex items-center`}>
                             {image.scenario}
                             {demoMode && <span className="ml-2 text-orange-600 text-sm">(Demo Mode)</span>}
+                            {image.conversationalEdits > 0 && (
+                              <span className="ml-2 text-blue-600 text-sm flex items-center">
+                                💬 {image.conversationalEdits} edits
+                              </span>
+                            )}
                           </h3>
                           <p className="text-sm text-gray-500 flex items-center">
                             <Clock className="h-4 w-4 mr-1" />
@@ -976,11 +904,11 @@ const MemoryResurrectionEngine = () => {
                         </div>
                       </div>
                       
-                      <div className="mb-4 relative">
+                      <div className="mb-4 relative cursor-pointer" onClick={() => openImageZoom(image)}>
                         <img
                           src={image.url}
                           alt={`Generated ${image.scenario}`}
-                          className="w-full h-96 object-contain rounded-lg bg-gray-50"
+                          className="w-full h-96 object-contain rounded-lg bg-gray-50 hover:opacity-90 transition-opacity"
                           style={{
                             maxHeight: '70vh',
                             aspectRatio: '16/9'
@@ -991,6 +919,11 @@ const MemoryResurrectionEngine = () => {
                             DEMO
                           </div>
                         )}
+                        <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity bg-black bg-opacity-20 rounded-lg">
+                          <div className="bg-white text-gray-900 px-3 py-2 rounded-lg text-sm font-medium shadow-lg">
+                            🔍 Click to zoom
+                          </div>
+                        </div>
                       </div>
                       
                       <div className="space-y-3">
@@ -1021,12 +954,24 @@ const MemoryResurrectionEngine = () => {
                           )}
                           {image.editHistory && image.editHistory.length > 0 && (
                             <div className="mt-2">
-                              <p className="font-medium text-xs">Conversational Edits:</p>
+                              <div className="flex items-center justify-between">
+                                <p className="font-medium text-xs">Conversational Edits:</p>
+                                {image.conversationalEdits && (
+                                  <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                                    {image.conversationalEdits} iterations
+                                  </span>
+                                )}
+                              </div>
                               <ul className="text-xs text-gray-500 ml-2">
                                 {image.editHistory.map((edit, idx) => (
                                   <li key={idx}>• {edit}</li>
                                 ))}
                               </ul>
+                              {image.conversationContext && (
+                                <p className="text-xs text-blue-600 mt-1">
+                                  💬 Context preserved across {image.conversationContext} conversation turns
+                                </p>
+                              )}
                             </div>
                           )}
                           {image.cost && (
@@ -1091,9 +1036,15 @@ const MemoryResurrectionEngine = () => {
                                 </button>
                               </div>
                               
-                              <p className="text-xs text-gray-500">
-                                💡 Nano Banana maintains character consistency across all edits
-                              </p>
+                              <div className="text-xs text-gray-500 space-y-1">
+                                <p>💡 Nano Banana maintains character consistency across all edits</p>
+                                <p>💬 Chat sessions preserve context for natural conversational editing</p>
+                                {chatSessions.has(image.id) && (
+                                  <p className="text-blue-600">
+                                    🔄 Active chat session - edits build on previous changes
+                                  </p>
+                                )}
+                              </div>
                             </div>
                           )}
                         </div>
@@ -1109,7 +1060,14 @@ const MemoryResurrectionEngine = () => {
               <div className={`rounded-xl shadow-lg p-6 transition-colors duration-300 mt-6 ${
         darkMode ? 'bg-gray-800' : 'bg-white'
       }`}>
-                <h2 className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'} mb-4`}>Creation History</h2>
+                <h2 className={`text-lg font-bold ${darkMode ? 'text-white' : 'text-gray-900'} mb-4 flex items-center`}>
+                  Creation & Conversation History
+                  {chatSessions.size > 0 && (
+                    <span className="ml-2 text-sm bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                      {chatSessions.size} active chat sessions
+                    </span>
+                  )}
+                </h2>
                 <div className="space-y-3">
                   {conversationHistory.map((entry, index) => (
                     <div key={index} className="flex items-start space-x-3">
@@ -1118,7 +1076,14 @@ const MemoryResurrectionEngine = () => {
                         entry.type === 'edit' ? 'bg-blue-500' : 'bg-green-500'
                       }`} />
                       <div className="flex-1">
-                        <p className={`text-sm ${darkMode ? 'text-white' : 'text-gray-900'}`}>{entry.content}</p>
+                        <p className={`text-sm ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                          {entry.content}
+                          {entry.type === 'edit' && entry.imageId && (
+                            <span className="ml-2 text-xs text-blue-600">
+                              (conversational edit)
+                            </span>
+                          )}
+                        </p>
                         <p className="text-xs text-gray-500">{entry.timestamp.toLocaleTimeString()}</p>
                       </div>
                     </div>
@@ -1129,6 +1094,88 @@ const MemoryResurrectionEngine = () => {
           </div>
         </div>
       </div>
+
+      {/* Photo Restoration Popup */}
+      {showRestorationPopup && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className={`rounded-lg p-6 max-w-md w-full mx-4 ${darkMode ? 'bg-gray-800' : 'bg-white'}`}>
+            <h3 className={`text-lg font-bold mb-4 ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+              Customize Photo Restoration
+            </h3>
+            <p className={`text-sm mb-4 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+              Enter specific instructions for how you want this photo restored:
+            </p>
+            <textarea
+              value={restorationInput}
+              onChange={(e) => setRestorationInput(e.target.value)}
+              placeholder="e.g., Restore and colorize this image from 1932, Enhance sharpness and remove scratches, Improve contrast and clarity..."
+              className="w-full h-24 p-3 border border-gray-300 rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+              autoFocus
+            />
+            <div className="flex justify-end space-x-3 mt-4">
+              <button
+                onClick={() => {
+                  setShowRestorationPopup(false);
+                  setRestorationPhotoId(null);
+                  setRestorationInput('');
+                }}
+                className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={executePhotoRestoration}
+                disabled={!restorationInput.trim()}
+                className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Restore Photo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Fullscreen Image Zoom */}
+      {zoomedImage && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-95 flex items-center justify-center z-50"
+          onClick={closeImageZoom}
+        >
+          <div className="relative max-w-[95vw] max-h-[95vh] flex items-center justify-center">
+            <img
+              src={zoomedImage.url}
+              alt={`Zoomed ${zoomedImage.scenario}`}
+              className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+              onClick={(e) => e.stopPropagation()} // Prevent closing when clicking on image
+            />
+            
+            {/* Close button */}
+            <button
+              onClick={closeImageZoom}
+              className="absolute top-4 right-4 bg-white bg-opacity-20 hover:bg-opacity-30 text-white rounded-full p-2 transition-all duration-200"
+              title="Close (or press Escape)"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            {/* Image info overlay */}
+            <div className="absolute bottom-4 left-4 bg-black bg-opacity-60 text-white px-4 py-2 rounded-lg backdrop-blur-sm">
+              <h3 className="font-medium">{zoomedImage.scenario}</h3>
+              <p className="text-sm opacity-80">{zoomedImage.timestamp.toLocaleString()}</p>
+              {zoomedImage.conversationalEdits > 0 && (
+                <p className="text-sm text-blue-300">💬 {zoomedImage.conversationalEdits} conversational edits</p>
+              )}
+            </div>
+
+            {/* Instructions overlay */}
+            <div className="absolute bottom-4 right-4 bg-black bg-opacity-60 text-white px-3 py-2 rounded-lg backdrop-blur-sm text-sm">
+              <p>Press <kbd className="bg-white bg-opacity-20 px-1 rounded">Esc</kbd> or click outside to close</p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
