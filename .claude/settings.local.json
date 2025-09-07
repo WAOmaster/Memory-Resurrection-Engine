@@ -16,7 +16,8 @@
       "WebSearch",
       "Bash(set PORT=3002)",
       "Bash(start http://localhost:3000)",
-      "Bash(set PORT=3003)"
+      "Bash(set PORT=3003)",
+      "WebFetch(domain:github.com)"
     ],
     "deny": [],
     "ask": []
