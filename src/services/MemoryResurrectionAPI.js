@@ -53,35 +53,59 @@ class MemoryResurrectionAPI {
 
     try {
       
-      // Separate photos by type
-      const backgroundPhotos = [...historicalPhotos, ...currentPhotos].filter(p => p.type === 'background');
-      const personPhotos = [...historicalPhotos, ...currentPhotos].filter(p => p.type !== 'background');
+      const parts = [];
+
+      // Start with an overall instruction
+      let initialPrompt = `Your task is to create a single, cohesive, photorealistic ${orientation} image by combining people from the following historical and current photos into a new scene.
       
-      // Build content following hackathon kit pattern: text first, then images
-      const imageGenerationPrompt = `Create a photorealistic ${orientation} image showing these ${personPhotos.length} people ${scenario.prompt.replace('{deceased_person}', 'from the historical photos')}. Make each person look exactly as they appear in their uploaded photo - same facial features, hair, age, and appearance. Set in a ${scenario.emotionalTone} ${scenario.title.toLowerCase()} scene with natural lighting.`;
-      
-      const parts = [
-        { text: imageGenerationPrompt }
-      ];
-      
-      // Add all photos following hackathon kit pattern
-      const allPhotos = [...personPhotos, ...backgroundPhotos];
-      for (let i = 0; i < allPhotos.length; i++) {
-        const photo = allPhotos[i];
-        if (photo.file) {
-          try {
-            const base64 = await this.fileToBase64(photo.file);
-            parts.push({
-              inlineData: {
-                mimeType: photo.file.type,
-                data: base64
+      **Scene:** ${scenario.prompt.replace('{deceased_person}', 'the person from the historical photo(s)')}
+      **Tone:** ${scenario.emotionalTone}
+      **Final Output:** A single, seamless, emotionally resonant photograph.`;
+      parts.push({ text: initialPrompt });
+
+      // Add historical photos with specific instructions
+      parts.push({ text: "\n\n--- HISTORICAL PHOTOS ---" });
+      parts.push({ text: "The following image(s) contain the people to be 'resurrected'. You MUST preserve their core facial identity. You MUST adapt their appearance (clothing, color, lighting) to believably fit into the modern scene described above." });
+      for (const photo of historicalPhotos) {
+          if (photo.file) {
+              try {
+                  const base64 = await this.fileToBase64(photo.file);
+                  parts.push({ inlineData: { mimeType: photo.file.type, data: base64 } });
+              } catch (error) {
+                  console.error(`Failed to process historical photo ${photo.name}:`, error);
               }
-            });
-          } catch (error) {
-            console.error(`Failed to process photo ${photo.name}:`, error);
-            // Continue with other photos if one fails
           }
-        }
+      }
+
+      // Add current photos with specific instructions
+      parts.push({ text: "\n\n--- CURRENT PHOTOS ---" });
+      parts.push({ text: "The following image(s) contain the people who will be in the scene with the historical person. You must render them *exactly* as they appear in their photos." });
+      for (const photo of currentPhotos) {
+          if (photo.file) {
+              try {
+                  const base64 = await this.fileToBase64(photo.file);
+                  parts.push({ inlineData: { mimeType: photo.file.type, data: base64 } });
+              } catch (error) {
+                  console.error(`Failed to process current photo ${photo.name}:`, error);
+              }
+          }
+      }
+
+      // Add background photos if any
+      const backgroundPhotos = [...historicalPhotos, ...currentPhotos].filter(p => p.type === 'background');
+      if (backgroundPhotos.length > 0) {
+          parts.push({ text: "\n\n--- BACKGROUND PHOTOS ---" });
+          parts.push({ text: "Use the following image(s) as inspiration for the background and setting." });
+          for (const photo of backgroundPhotos) {
+              if (photo.file) {
+                  try {
+                      const base64 = await this.fileToBase64(photo.file);
+                      parts.push({ inlineData: { mimeType: photo.file.type, data: base64 } });
+                  } catch (error) {
+                      console.error(`Failed to process background photo ${photo.name}:`, error);
+                  }
+              }
+          }
       }
 
       console.log('Calling Gemini API for image generation...');
