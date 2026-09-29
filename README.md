@@ -31,7 +31,7 @@ cp .env.example .env
 
 3. Add your Google Gemini API key to `.env`:
 ```
-REACT_APP_GEMINI_API_KEY=your_api_key_here
+GEMINI_API_KEY=your_api_key_here
 ```
 
 ## Getting Your Google Gemini API Key
@@ -98,7 +98,7 @@ The `build` folder can be deployed to any static hosting service:
 - Firebase Hosting
 
 ### Environment Variables for Production
-Make sure to set `REACT_APP_GEMINI_API_KEY` in your hosting platform's environment variables.
+Set `GEMINI_API_KEY` (server-only, no `REACT_APP_` prefix) in your hosting platform's environment variables. Use `vercel dev` locally so `/api/gemini` runs.
 
 ## Technologies Used
 

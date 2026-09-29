@@ -22,10 +22,7 @@ const MemoryResurrectionEngine = () => {
   const [zoomedImage, setZoomedImage] = useState(null);
   const fileInputRef = useRef(null);
 
-  const memoryAPI = new MemoryResurrectionAPI(process.env.REACT_APP_GEMINI_API_KEY);
-  
-  // Debug: Check if API key is available
-  console.log('API Key available:', !!process.env.REACT_APP_GEMINI_API_KEY);
+  const memoryAPI = new MemoryResurrectionAPI();
 
   // Close download options when clicking outside
   useEffect(() => {
