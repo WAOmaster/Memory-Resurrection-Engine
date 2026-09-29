@@ -12,7 +12,7 @@ const MemoryResurrectionEngine = () => {
   const [editingImageId, setEditingImageId] = useState(null);
   const [chatSessions, setChatSessions] = useState(new Map()); // Store chat sessions per image
   const [showDownloadOptions, setShowDownloadOptions] = useState(null);
-  const [imageOrientation, setImageOrientation] = useState('landscape');
+  const [imageOrientation] = useState('landscape');
   const [enhancingPhotos, setEnhancingPhotos] = useState(new Set());
   const [demoMode, setDemoMode] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
@@ -22,10 +22,7 @@ const MemoryResurrectionEngine = () => {
   const [zoomedImage, setZoomedImage] = useState(null);
   const fileInputRef = useRef(null);
 
-  const memoryAPI = new MemoryResurrectionAPI(process.env.REACT_APP_GEMINI_API_KEY);
-  
-  // Debug: Check if API key is available
-  console.log('API Key available:', !!process.env.REACT_APP_GEMINI_API_KEY);
+  const memoryAPI = new MemoryResurrectionAPI();
 
   // Close download options when clicking outside
   useEffect(() => {

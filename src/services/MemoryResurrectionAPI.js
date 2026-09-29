@@ -1,18 +1,13 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
+const PROXY = { baseUrl: `${window.location.origin}/api/gemini` };
+
 class MemoryResurrectionAPI {
-  constructor(apiKey) {
-    if (!apiKey) {
-      console.warn('Gemini API key not provided. Demo mode will be used.');
-      this.demoMode = true;
-      this.genAI = null;
-      return;
-    }
-    
-    this.genAI = new GoogleGenerativeAI(apiKey);
-    this.model = "gemini-2.5-flash-image-preview"; // Correct model for image generation
+  constructor() {
+    // The key lives on the server: the SDK is pointed at /api/gemini, which adds it (see api/gemini.js).
+    this.genAI = new GoogleGenerativeAI('held-by-server');
+    this.model = "gemini-2.5-flash-image";
     this.demoMode = false;
-    console.log('MemoryResurrectionAPI initialized with API key');
   }
   
   setDemoMode(isDemoMode) {
@@ -91,7 +86,7 @@ class MemoryResurrectionAPI {
       
       const model = this.genAI.getGenerativeModel({ 
         model: this.model
-      });
+      }, PROXY);
       
       // Following hackathon kit structure: use generateContent with parts array
       const result = await model.generateContent(parts);
@@ -240,7 +235,7 @@ class MemoryResurrectionAPI {
     try {
       const model = this.genAI.getGenerativeModel({ 
         model: this.model
-      });
+      }, PROXY);
       
       const chat = model.startChat({
         generationConfig: {
@@ -378,7 +373,7 @@ class MemoryResurrectionAPI {
           maxOutputTokens: 1290,
           temperature: 0.7,
         }
-      });
+      }, PROXY);
       
       const result = await model.generateContent(parts);
       
@@ -652,7 +647,7 @@ FAMILY INTEGRATION DETAILS:
           maxOutputTokens: 1290,
           temperature: 0.3, // Lower temperature for consistent enhancement
         }
-      });
+      }, PROXY);
       
       const result = await model.generateContent(parts);
       
