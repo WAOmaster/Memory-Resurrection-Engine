@@ -12,7 +12,7 @@ const MemoryResurrectionEngine = () => {
   const [editingImageId, setEditingImageId] = useState(null);
   const [chatSessions, setChatSessions] = useState(new Map()); // Store chat sessions per image
   const [showDownloadOptions, setShowDownloadOptions] = useState(null);
-  const [imageOrientation, setImageOrientation] = useState('landscape');
+  const [imageOrientation] = useState('landscape');
   const [enhancingPhotos, setEnhancingPhotos] = useState(new Set());
   const [demoMode, setDemoMode] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
